@@ -145,7 +145,6 @@ function tagKey(n: string) {
 
 export function QuickBetPremiumPage() {
   const [userId, setUserId] = useState<string | null>(null);
-  const [displayName, setDisplayName] = useState<string | null>(null);
   const [isLiffReady, setIsLiffReady] = useState(false);
   const [lotteryName, setLotteryName] = useState<LotteryName | "">("");
   const [mode, setMode] = useState<BetType>("2ตัว");
@@ -441,6 +440,10 @@ export function QuickBetPremiumPage() {
   }
 
   async function submit() {
+    // Debug
+    console.log("LINE CLIENT", liff.isInClient());
+    console.log("LOGGED IN", liff.isLoggedIn());
+
     if (!userId) return showToast("error", "ยังไม่ได้เข้าสู่ระบบ LINE");
     if (!lotteryName) return showToast("error", "กรุณาเลือกชื่อหวย");
     if (generated.length === 0) return showToast("error", "ยังไม่มีรายการ");
@@ -468,7 +471,6 @@ export function QuickBetPremiumPage() {
 
     if (items.length === 0) return showToast("error", "กรุณากรอกยอดอย่างน้อย 1 ช่อง");
 
-    const createdAt = new Date().toISOString();
     const total = items.reduce((sum, it) => sum + it.amount, 0);
 
     setIsSubmitting(true);
@@ -482,7 +484,24 @@ export function QuickBetPremiumPage() {
       });
 
       setIsLocked(true);
-      showToast("success", "ส่งรายการซื้อเรียบร้อย (กำลังส่งบิลเข้า LINE)");
+      showToast("success", "บันทึกสำเร็จ");
+
+      // Ensure LIFF initialized (in case user navigated oddly)
+      try {
+        await liff.init({
+          liffId: process.env.NEXT_PUBLIC_LIFF_ID!,
+        });
+      } catch (error) {
+        console.error(error);
+      }
+
+      console.log("LINE CLIENT", liff.isInClient());
+      console.log("LOGGED IN", liff.isLoggedIn());
+
+      if (!liff.isInClient()) {
+        showToast("error", "ต้องเปิดผ่าน LINE");
+        return;
+      }
 
       const maxLines = 50;
       const listNumbers = generated.slice(0, maxLines);
@@ -499,47 +518,36 @@ export function QuickBetPremiumPage() {
           if (showBottom && parsedBottom !== null) parts.push(`ล่าง ${fmtAmount(parsedBottom)}`);
           if (showTod && parsedTod !== null) parts.push(`โต๊ด ${fmtAmount(parsedTod)}`);
         }
-        return `${n} / ${parts.join(" / ")}`;
+        return `${n} = ${parts.join(" / ")}`;
       };
 
       const summaryLines = listNumbers.map(linePerNumber);
       if (extraCount > 0) summaryLines.push(`…และอีก ${extraCount} รายการ`);
 
-      const customerText = [
-        "🧾 สรุปรายการ",
-        "",
-        `หวย: ${lotteryName}`,
-        `ประเภท: ${mode}`,
-        "",
-        `จำนวนรายการ: ${generated.length} รายการ`,
-        "",
-        "รายการ:",
-        ...summaryLines,
-        "",
-        `รวมยอด: ฿${fmtAmount(total)}`,
-        "",
-        "สถานะ: รอดำเนินการ",
-      ].join("\n");
+      const summary = `
+🧾 สรุปรายการแทงหวย
 
-      const adminText = [
-        "🚨 มีรายการใหม่",
-        "",
-        `ลูกค้า: ${displayName ?? "-"}`,
-        "",
-        `userId: ${userId}`,
-        "",
-        `หวย: ${lotteryName}`,
-        `ประเภท: ${mode}`,
-        `จำนวน: ${generated.length}`,
-        `ยอดรวม: ฿${fmtAmount(total)}`,
-        `เวลา: ${createdAt}`,
-      ].join("\n");
+หวย: ${lotteryName}
+ประเภท: ${mode}
+
+${summaryLines.join("\n")}
+
+รวม: ${fmtAmount(total)} บาท
+      `.trim();
 
       try {
-        await liff.sendMessages([{ type: "text", text: customerText }, { type: "text", text: adminText }]);
-      } catch {
+        await liff.sendMessages([
+          {
+            type: "text",
+            text: summary,
+          },
+        ]);
+        showToast("success", "ส่งบิลเข้า LINE สำเร็จ");
+      } catch (error) {
         // IMPORTANT: do not rollback database
-        showToast("error", "บันทึกสำเร็จ แต่ส่งบิลเข้า LINE ไม่สำเร็จ");
+        console.error(error);
+        const message = error instanceof Error ? error.message : "";
+        showToast("error", message || "ส่ง LINE ไม่สำเร็จ");
       }
     } catch (err) {
       showToast("error", err instanceof Error ? err.message : "ส่งรายการไม่สำเร็จ");
@@ -558,7 +566,6 @@ export function QuickBetPremiumPage() {
         }
         const p = await liff.getProfile();
         setUserId(p.userId);
-        setDisplayName(p.displayName ?? null);
       } catch {
         showToast("error", "ไม่สามารถเริ่มต้น LIFF ได้");
       } finally {
