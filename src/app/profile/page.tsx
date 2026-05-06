@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import liff from "@line/liff";
+import { ensureLiffReady } from "@/src/lib/liffAuth";
 
 type Profile = {
   userId: string;
@@ -18,7 +19,7 @@ export default function ProfilePage() {
   useEffect(() => {
     async function initLIFF() {
       try {
-        await liff.init({ liffId: "2009989826-L6OPDoa5" });
+        await ensureLiffReady();
 
         if (!liff.isLoggedIn()) {
           liff.login();

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/app/api/_lib/supabaseAdmin";
 import { requireAdmin } from "@/app/api/_lib/adminGuard";
+import { pushLineTextSafe } from "@/app/api/_lib/lineMessaging";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,6 +17,13 @@ export async function POST(req: NextRequest) {
       p_actor: admin.userId,
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    const bill = data as unknown as { user_id?: string; bill_no?: string };
+    if (bill?.user_id) {
+      await pushLineTextSafe({
+        to: bill.user_id,
+        text: `บิล ${bill.bill_no ?? ""} ถูกยกเลิก และคืนเครดิตแล้ว`,
+      });
+    }
     return NextResponse.json({ bill: data });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Server error";

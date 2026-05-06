@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import liff from "@line/liff";
 import { useAdminGuard } from "@/src/components/AdminGuard";
+import { useLiffAuth } from "@/src/components/LiffAuthProvider";
 
 type Tx = {
   id: string;
@@ -33,15 +33,12 @@ function formatDate(iso: string) {
   }).format(d);
 }
 
-async function authedAdminFetch(input: RequestInfo, init: RequestInit = {}) {
-  const idToken = liff.getIDToken();
-  if (!idToken) throw new Error("Missing LINE id token");
-  const headers = new Headers(init.headers);
-  headers.set("authorization", `Bearer ${idToken}`);
-  return fetch(input, { ...init, headers });
-}
-
 export default function AdminWalletPage() {
+  const { authFetch } = useLiffAuth();
+  const authedAdminFetch = useCallback(
+    (input: RequestInfo, init: RequestInit = {}) => authFetch(input, init),
+    [authFetch],
+  );
   const { isReady, isAdmin, error } = useAdminGuard();
   const [txs, setTxs] = useState<Tx[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>("pending");
@@ -68,7 +65,7 @@ export default function AdminWalletPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [query]);
+  }, [query, authedAdminFetch]);
 
   async function approve(txId: string, kind: "deposit" | "withdraw") {
     const ok = confirm("ยืนยันอนุมัติรายการนี้?");
@@ -90,7 +87,9 @@ export default function AdminWalletPage() {
 
   async function reject(txId: string) {
     const reason = prompt("เหตุผล (optional)") ?? "";
-    const res = await authedAdminFetch("/api/admin/reject-deposit", {
+    const tx = txs.find((x) => x.id === txId);
+    const endpoint = tx?.type === "withdraw" ? "/api/admin/reject-withdraw" : "/api/admin/reject-deposit";
+    const res = await authedAdminFetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ txId, adminNote: reason }),
@@ -116,17 +115,25 @@ export default function AdminWalletPage() {
   return (
     <main className="min-h-screen bg-black text-white px-5 py-6">
       <section className="max-w-2xl mx-auto">
-        <header className="flex items-center justify-between gap-3 mb-6">
+        <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-6">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">Admin • เครดิต</h1>
-            <p className="text-sm text-zinc-500">รายการเติม/ถอนเครดิต</p>
+            <h1 className="text-xl font-bold tracking-tight">รวมธุรกรรมเครดิต</h1>
+            <p className="text-sm text-zinc-500">แนะนำให้ไป เติม / ถอน จากเมนูแอดมิน</p>
+            <div className="flex flex-wrap gap-2 mt-3">
+              <Link href="/admin/deposits" className="text-xs underline text-emerald-400">
+                คำขอเติม →
+              </Link>
+              <Link href="/admin/withdraws" className="text-xs underline text-emerald-400">
+                คำขอถอน →
+              </Link>
+            </div>
           </div>
           <div className="flex gap-2">
             <Link
-              href="/admin"
+              href="/admin/dashboard"
               className="rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm"
             >
-              เมนู
+              แดชบอร์ด
             </Link>
             <Link
               href="/"
@@ -182,22 +189,32 @@ export default function AdminWalletPage() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold">{t.type}</p>
+                    <p className="text-sm font-semibold">
+                      {t.type === "deposit" ? "เติมเครดิต" : t.type === "withdraw" ? "ถอนเครดิต" : t.type}
+                    </p>
                     <p className="text-xs text-zinc-500 mt-1 break-all">
                       {t.user_id} • {t.display_name ?? "-"}
                     </p>
                     <p className="text-xs text-zinc-500 mt-1">{formatDate(t.created_at)}</p>
                     {t.note && <p className="text-xs text-zinc-400 mt-1">{t.note}</p>}
-                    {t.slip_url && (
-                      <a
-                        href={t.slip_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs text-cyan-200 mt-2 inline-block"
-                      >
-                        ดูสลิป
-                      </a>
-                    )}
+                    {t.slip_url ? (
+                      <div className="mt-3 grid gap-2">
+                        <a
+                          href={t.slip_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-cyan-200 inline-block"
+                        >
+                          เปิดรูปสลิป
+                        </a>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={t.slip_url}
+                          alt="slip"
+                          className="w-full max-w-full rounded-xl border border-zinc-800 bg-zinc-950/40"
+                        />
+                      </div>
+                    ) : null}
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-semibold">{formatTHB(t.amount)}</p>

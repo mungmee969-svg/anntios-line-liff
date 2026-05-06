@@ -7,32 +7,51 @@ export async function GET(req: NextRequest) {
     const user = await verifyLiffIdToken(req);
     const supabase = getSupabaseAdmin();
 
-    // wallet
-    const { data: existing, error: existingError } = await supabase
-      .from("user_wallets")
-      .select(
-        "id,user_id,display_name,credit_balance,locked_balance,created_at,updated_at",
-      )
-      .eq("user_id", user.userId)
-      .maybeSingle();
-    if (existingError) throw new Error(existingError.message);
+    // Ensure wallet exists (never missing) via DB helper
+    const { data: wRpc, error: rpcErr } = await supabase.rpc("_get_or_create_wallet", {
+      p_user_id: user.userId,
+      p_display_name: user.displayName,
+    });
 
-    const wallet =
-      existing ??
-      (
-        await supabase
-          .from("user_wallets")
-          .insert({
-            user_id: user.userId,
-            display_name: user.displayName,
-            credit_balance: 0,
-            locked_balance: 0,
-          })
-          .select(
-            "id,user_id,display_name,credit_balance,locked_balance,created_at,updated_at",
-          )
-          .single()
-      ).data;
+    let wallet = wRpc as {
+      id: string;
+      user_id: string;
+      display_name: string | null;
+      credit_balance: number;
+      locked_balance: number;
+      created_at: string;
+      updated_at: string;
+    } | null;
+
+    if (rpcErr || !wallet) {
+      const { data: existing, error: existingError } = await supabase
+        .from("user_wallets")
+        .select(
+          "id,user_id,display_name,credit_balance,locked_balance,created_at,updated_at",
+        )
+        .eq("user_id", user.userId)
+        .maybeSingle();
+      if (existingError) throw new Error(existingError.message);
+
+      wallet =
+        existing ??
+        (
+          await supabase
+            .from("user_wallets")
+            .insert({
+              user_id: user.userId,
+              display_name: user.displayName,
+              credit_balance: 0,
+              locked_balance: 0,
+            })
+            .select(
+              "id,user_id,display_name,credit_balance,locked_balance,created_at,updated_at",
+            )
+            .single()
+        ).data;
+
+      if (!wallet) throw new Error("wallet create failed");
+    }
 
     // txs
     const { data: txs, error: txError } = await supabase

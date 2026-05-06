@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import liff from "@line/liff";
+import { useLiffAuth } from "@/src/components/LiffAuthProvider";
+import { ensureLiffReady } from "@/src/lib/liffAuth";
 
 type Profile = {
   userId: string;
@@ -15,11 +17,14 @@ const cardBase =
   "rounded-2xl p-5 text-left font-semibold transition-all duration-200 ease-out hover:-translate-y-0.5 hover:scale-[1.01] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30";
 
 export default function Home() {
+  const { isSessionReady } = useLiffAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
+    if (!isSessionReady) return;
+
     async function initLIFF() {
-      await liff.init({ liffId: "2009989826-L6OPDoa5" });
+      await ensureLiffReady();
 
       if (!liff.isLoggedIn()) {
         liff.login();
@@ -31,12 +36,12 @@ export default function Home() {
     }
 
     initLIFF();
-  }, []);
+  }, [isSessionReady]);
 
   if (!profile) {
     return (
       <main className="min-h-screen bg-black text-white flex items-center justify-center">
-        Loading LIFF...
+        <p className="text-sm text-zinc-400">กำลังโหลดโปรไฟล์…</p>
       </main>
     );
   }

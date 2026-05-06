@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import liff from "@line/liff";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAdminGuard } from "@/src/components/AdminGuard";
+import { useLiffAuth } from "@/src/components/LiffAuthProvider";
 
 type Bill = {
   id: string;
@@ -33,18 +34,43 @@ function formatDate(iso: string) {
   }).format(d);
 }
 
-async function authedAdminFetch(input: RequestInfo, init: RequestInit = {}) {
-  const idToken = liff.getIDToken();
-  if (!idToken) throw new Error("Missing LINE id token");
-  const headers = new Headers(init.headers);
-  headers.set("authorization", `Bearer ${idToken}`);
-  return fetch(input, { ...init, headers });
+function StatusBadge({ status, className = "" }: { status: string; className?: string }) {
+  const map: Record<string, string> = {
+    pending: "border-amber-800/60 bg-amber-950/35 text-amber-200",
+    accepted: "border-sky-800/50 bg-sky-950/30 text-sky-200",
+    rejected: "border-rose-800/50 bg-rose-950/30 text-rose-200",
+    settled: "border-emerald-800/50 bg-emerald-950/30 text-emerald-200",
+    cancelled: "border-zinc-700 bg-zinc-900/40 text-zinc-300",
+  };
+  return (
+    <span
+      className={`text-xs rounded-full border px-2 py-0.5 capitalize ${map[status] ?? map.pending} ${className}`}
+    >
+      {status}
+    </span>
+  );
 }
 
 export default function AdminBillsPage() {
+  return (
+    <Suspense fallback={<main className="px-4 py-6 text-zinc-400">กำลังโหลด...</main>}>
+      <AdminBillsInner />
+    </Suspense>
+  );
+}
+
+function AdminBillsInner() {
+  const searchParams = useSearchParams();
+  const { authFetch } = useLiffAuth();
+  const authedAdminFetch = useCallback(
+    (input: RequestInfo, init: RequestInit = {}) => authFetch(input, init),
+    [authFetch],
+  );
   const { isReady, isAdmin, error } = useAdminGuard();
   const [bills, setBills] = useState<Bill[]>([]);
-  const [filterStatus, setFilterStatus] = useState<string>("pending");
+  const [filterStatus, setFilterStatus] = useState<string>(
+    () => searchParams.get("status") ?? "pending",
+  );
   const [isLoading, setIsLoading] = useState(false);
 
   const query = useMemo(() => {
@@ -66,7 +92,7 @@ export default function AdminBillsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [query]);
+  }, [query, authedAdminFetch]);
 
   async function cancelBill(billId: string) {
     const reason = prompt("เหตุผลยกเลิก (optional)") ?? "";
@@ -91,23 +117,21 @@ export default function AdminBillsPage() {
     void load();
   }, [isReady, isAdmin, load]);
 
-  if (!isReady) return <main className="min-h-screen bg-black text-white px-5 py-6">Loading...</main>;
-  if (error) return <main className="min-h-screen bg-black text-white px-5 py-6">{error}</main>;
-  if (!isAdmin) return <main className="min-h-screen bg-black text-white px-5 py-6">Forbidden</main>;
+  if (!isReady) return <main className="px-4 py-6 text-zinc-400">กำลังโหลด...</main>;
+  if (error) return <main className="px-4 py-6 text-rose-200">{error}</main>;
+  if (!isAdmin) return <main className="px-4 py-6">ไม่มีสิทธิ์</main>;
 
   return (
-    <main className="min-h-screen bg-black text-white px-5 py-6">
-      <section className="max-w-2xl mx-auto">
-        <header className="flex items-center justify-between gap-3 mb-6">
+    <main className="px-4 py-6 text-white max-w-5xl mx-auto w-full">
+      <section className="w-full">
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">Admin • บิล</h1>
-            <p className="text-sm text-zinc-500">จัดการบิล/ยกเลิกบิล</p>
+            <h1 className="text-xl font-bold tracking-tight">บิลลูกค้า</h1>
+            <p className="text-sm text-zinc-500">กรองสถานะ / ยกเลิก / ส่งบิลใหม่</p>
           </div>
-          <div className="flex gap-2">
-            <Link href="/admin" className="rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm">
-              เมนู
-            </Link>
-          </div>
+          <Link href="/admin/dashboard" className="text-sm text-emerald-400 hover:underline underline-offset-2">
+            แดชบอร์ด
+          </Link>
         </header>
 
         <div className="grid gap-3 mb-4">
@@ -140,46 +164,104 @@ export default function AdminBillsPage() {
             ไม่มีบิล
           </div>
         ) : (
-          <div className="grid gap-3">
-            {bills.map((b) => (
-              <article key={b.id} className="rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-950 to-black p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs text-zinc-500">{b.bill_no}</p>
-                    <p className="text-sm font-semibold text-zinc-100 mt-1">
-                      {b.lottery_name ?? "-"} • {b.bet_type ?? "-"}
-                    </p>
-                    <p className="text-xs text-zinc-500 mt-1 break-all">
-                      {b.user_id} • {b.display_name ?? "-"}
-                    </p>
-                    <p className="text-xs text-zinc-500 mt-1">{formatDate(b.created_at)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold">{formatTHB(b.total_amount)}</p>
-                    <p className="text-xs text-zinc-500 mt-1">{b.status}</p>
-                  </div>
-                </div>
+          <>
+            <div className="hidden md:block overflow-x-auto rounded-2xl border border-zinc-800">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-zinc-950/80 text-xs uppercase text-zinc-500">
+                  <tr>
+                    <th className="px-4 py-3">บิล</th>
+                    <th className="px-4 py-3">ลูกค้า</th>
+                    <th className="px-4 py-3">หวย</th>
+                    <th className="px-4 py-3">ยอด</th>
+                    <th className="px-4 py-3">สถานะ</th>
+                    <th className="px-4 py-3">การทำงาน</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bills.map((b) => (
+                    <tr key={b.id} className="border-t border-zinc-800/80">
+                      <td className="px-4 py-3">
+                        <div className="font-mono text-xs text-zinc-400">{b.bill_no}</div>
+                        <div className="text-xs text-zinc-500">{formatDate(b.created_at)}</div>
+                      </td>
+                      <td className="px-4 py-3 break-all max-w-[200px]">{b.display_name ?? b.user_id}</td>
+                      <td className="px-4 py-3">
+                        <div>{b.lottery_name ?? "-"}</div>
+                        <div className="text-xs text-zinc-500">{b.bet_type ?? "-"}</div>
+                      </td>
+                      <td className="px-4 py-3 tabular-nums font-medium">{formatTHB(b.total_amount)}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={b.status} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-2">
+                          <Link
+                            href={`/admin/bills/${b.id}`}
+                            className="text-center rounded-xl border border-zinc-700 bg-zinc-900/50 px-2 py-1.5 font-medium"
+                          >
+                            รายละเอียด
+                          </Link>
+                          {b.status !== "cancelled" && b.status !== "settled" ? (
+                            <button
+                              type="button"
+                              onClick={() => cancelBill(b.id)}
+                              className="rounded-xl bg-rose-950/50 border border-rose-900/50 px-2 py-1.5 font-medium text-rose-100"
+                            >
+                              ยกเลิกบิล
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-                {b.status !== "cancelled" && b.status !== "settled" && (
+            <div className="md:hidden grid gap-3">
+              {bills.map((b) => (
+                <article
+                  key={b.id}
+                  className="rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-950 to-black p-5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs text-zinc-500">{b.bill_no}</p>
+                      <p className="text-sm font-semibold text-zinc-100 mt-1">
+                        {b.lottery_name ?? "-"} • {b.bet_type ?? "-"}
+                      </p>
+                      <p className="text-xs text-zinc-500 mt-1 break-all">
+                        {b.user_id} • {b.display_name ?? "-"}
+                      </p>
+                      <p className="text-xs text-zinc-500 mt-1">{formatDate(b.created_at)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold tabular-nums">{formatTHB(b.total_amount)}</p>
+                      <StatusBadge status={b.status} className="mt-2 inline-block" />
+                    </div>
+                  </div>
+
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <Link
-                      href={`/history/${b.id}`}
+                      href={`/admin/bills/${b.id}`}
                       className="rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-2 text-sm font-semibold text-center"
                     >
-                      ดูรายละเอียด
+                      รายละเอียด
                     </Link>
-                    <button
-                      type="button"
-                      onClick={() => cancelBill(b.id)}
-                      className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black"
-                    >
-                      ยกเลิกบิล
-                    </button>
+                    {b.status !== "cancelled" && b.status !== "settled" ? (
+                      <button
+                        type="button"
+                        onClick={() => cancelBill(b.id)}
+                        className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black"
+                      >
+                        ยกเลิกบิล
+                      </button>
+                    ) : null}
                   </div>
-                )}
-              </article>
-            ))}
-          </div>
+                </article>
+              ))}
+            </div>
+          </>
         )}
       </section>
     </main>

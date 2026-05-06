@@ -16,8 +16,11 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import liff from "@line/liff";
+import { CreditBadge } from "@/components/CreditBadge";
+import { useLiffAuth } from "@/src/components/LiffAuthProvider";
+import { useWalletData } from "@/src/components/WalletDataProvider";
+import { ensureLiffReady } from "@/src/lib/liffAuth";
 import {
-  saveRecords,
   type BetType,
   type LotteryName,
   type RecordType,
@@ -144,7 +147,10 @@ function tagKey(n: string) {
 }
 
 export function QuickBetPremiumPage() {
+  const { isSessionReady, authFetch } = useLiffAuth();
+  const { refreshWallet } = useWalletData();
   const [userId, setUserId] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const [isLiffReady, setIsLiffReady] = useState(false);
   const [lotteryName, setLotteryName] = useState<LotteryName | "">("");
   const [mode, setMode] = useState<BetType>("2ตัว");
@@ -471,26 +477,61 @@ export function QuickBetPremiumPage() {
 
     if (items.length === 0) return showToast("error", "กรุณากรอกยอดอย่างน้อย 1 ช่อง");
 
-    const total = items.reduce((sum, it) => sum + it.amount, 0);
-
     setIsSubmitting(true);
     try {
-      await saveRecords({
-        userId,
-        lotteryName,
-        betType: mode,
-        note: memo.trim() ? memo.trim() : undefined,
-        items,
+      const now = new Date();
+      type SubmitBillResponse =
+        | { bill: { id: string; bill_no: string; created_at: string; total_amount: number; display_name?: string | null } }
+        | { error: string };
+
+      const totalAmount = items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+      const latestWallet = await refreshWallet();
+      if (!latestWallet) {
+        showToast("error", "ไม่สามารถตรวจสอบเครดิตได้ กรุณาลองใหม่");
+        return;
+      }
+      const credit = Number(latestWallet.credit_balance ?? 0);
+      if (credit <= 0) {
+        showToast("error", "เครดิตไม่พอ กรุณาเติมเครดิตก่อน");
+        return;
+      }
+      if (credit < totalAmount) {
+        showToast("error", "เครดิตไม่พอ ยอดบิลมากกว่าเครดิตคงเหลือ");
+        return;
+      }
+
+      const res = await authFetch("/api/bills/submit", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          lotteryName,
+          betType: mode,
+          note: memo.trim() ? memo.trim() : undefined,
+          items,
+        }),
       });
+
+      const payload = (await res.json().catch(() => ({}))) as unknown as SubmitBillResponse;
+      if (!res.ok || "error" in payload) {
+        showToast("error", ("error" in payload && payload.error) || "ส่งรายการไม่สำเร็จ");
+        return;
+      }
+
+      const bill = payload.bill;
+
+      const createdAtText = new Intl.DateTimeFormat("th-TH", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(bill?.created_at ? new Date(bill.created_at) : now);
 
       setIsLocked(true);
       showToast("success", "บันทึกสำเร็จ");
 
-      // Ensure LIFF initialized (in case user navigated oddly)
+      // Ensure LIFF ready (reuse shared init promise)
       try {
-        await liff.init({
-          liffId: process.env.NEXT_PUBLIC_LIFF_ID!,
-        });
+        await ensureLiffReady();
       } catch (error) {
         console.error(error);
       }
@@ -503,37 +544,61 @@ export function QuickBetPremiumPage() {
         return;
       }
 
-      const maxLines = 50;
-      const listNumbers = generated.slice(0, maxLines);
-      const extraCount = Math.max(0, generated.length - maxLines);
-
       const fmtAmount = (n: number) => new Intl.NumberFormat("th-TH").format(n);
+      const maxReceiptLines = 40;
+      const receiptNumbers = generated.slice(0, maxReceiptLines);
+      const remaining = Math.max(0, generated.length - maxReceiptLines);
 
-      const linePerNumber = (n: string) => {
-        const parts: string[] = [];
+      const padRight = (s: string, len: number) =>
+        s.length >= len ? s : s + " ".repeat(len - s.length);
+      const padLeft = (s: string, len: number) =>
+        s.length >= len ? s : " ".repeat(len - s.length) + s;
+
+      const amountCell = (label: string, amt: number | null) =>
+        amt === null ? "" : `${label} ${padLeft(fmtAmount(amt), 3)}`;
+
+      const receiptLine = (n: string) => {
+        const numberCol = padRight(n, 4);
+        const cells: string[] = [];
         if (mode === "6กลับ") {
-          if (parsedTop !== null) parts.push(`บน ${fmtAmount(parsedTop)}`);
+          cells.push(amountCell("บน", parsedTop));
         } else {
-          if (parsedTop !== null) parts.push(`${primaryType} ${fmtAmount(parsedTop)}`);
-          if (showBottom && parsedBottom !== null) parts.push(`ล่าง ${fmtAmount(parsedBottom)}`);
-          if (showTod && parsedTod !== null) parts.push(`โต๊ด ${fmtAmount(parsedTod)}`);
+          if (parsedTop !== null) cells.push(amountCell(primaryType, parsedTop));
+          if (showBottom) cells.push(amountCell("ล่าง", parsedBottom));
+          if (showTod) cells.push(amountCell("โต๊ด", parsedTod));
         }
-        return `${n} = ${parts.join(" / ")}`;
+        return `${numberCol} ${cells.filter(Boolean).join("   ")}`.trimEnd();
       };
 
-      const summaryLines = listNumbers.map(linePerNumber);
-      if (extraCount > 0) summaryLines.push(`…และอีก ${extraCount} รายการ`);
+      const divider = "━━━━━━━━━━━━━━";
+      const lines: string[] = [];
+      lines.push("🧾 รวยไม่ไหว");
+      lines.push(divider);
+      lines.push("ใบสรุปรายการ");
+      lines.push("");
+      lines.push(`เลขบิล: ${bill.bill_no}`);
+      lines.push(`ลูกค้า: ${displayName ?? bill.display_name ?? "-"}`);
+      lines.push(`หวย: ${lotteryName}`);
+      lines.push(`ประเภท: ${mode}`);
+      lines.push(`เวลา: ${createdAtText}`);
+      lines.push(divider);
+      lines.push("");
+      lines.push("รายการ");
+      for (const n of receiptNumbers) lines.push(receiptLine(n));
+      if (remaining > 0) lines.push(`...และอีก ${remaining} รายการ`);
+      lines.push("");
+      lines.push(divider);
+      lines.push(`จำนวน: ${generated.length} รายการ`);
+      lines.push(`รวมยอด: ${fmtAmount(bill.total_amount)} บาท`);
+      lines.push("สถานะ: รอดำเนินการ");
+      lines.push(divider);
+      lines.push("");
+      lines.push("หมายเหตุ:");
+      lines.push(memo.trim() ? memo.trim() : "-");
+      lines.push("");
+      lines.push("หากต้องการยกเลิก กรุณาแจ้งแอดมิน");
 
-      const summary = `
-🧾 สรุปรายการแทงหวย
-
-หวย: ${lotteryName}
-ประเภท: ${mode}
-
-${summaryLines.join("\n")}
-
-รวม: ${fmtAmount(total)} บาท
-      `.trim();
+      const summary = lines.join("\n");
 
       try {
         await liff.sendMessages([
@@ -549,6 +614,8 @@ ${summaryLines.join("\n")}
         const message = error instanceof Error ? error.message : "";
         showToast("error", message || "ส่ง LINE ไม่สำเร็จ");
       }
+
+      void refreshWallet();
     } catch (err) {
       showToast("error", err instanceof Error ? err.message : "ส่งรายการไม่สำเร็จ");
     } finally {
@@ -557,26 +624,35 @@ ${summaryLines.join("\n")}
   }
 
   useEffect(() => {
+    if (!isSessionReady) return;
+
+    let cancelled = false;
+
     async function init() {
       try {
-        await liff.init({ liffId: "2009989826-L6OPDoa5" });
+        await ensureLiffReady();
         if (!liff.isLoggedIn()) {
           liff.login();
           return;
         }
         const p = await liff.getProfile();
-        setUserId(p.userId);
+        if (!cancelled) {
+          setUserId(p.userId);
+          setDisplayName(p.displayName ?? null);
+        }
       } catch {
         showToast("error", "ไม่สามารถเริ่มต้น LIFF ได้");
       } finally {
-        setIsLiffReady(true);
+        if (!cancelled) setIsLiffReady(true);
       }
     }
+
     init();
     return () => {
+      cancelled = true;
       if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
     };
-  }, []);
+  }, [isSessionReady]);
 
   useEffect(() => {
     // Mode-specific quick generation helpers
@@ -638,6 +714,10 @@ ${summaryLines.join("\n")}
             กลับ
           </Link>
         </header>
+
+        <div className="mb-3 w-full max-w-full min-w-0">
+          <CreditBadge className="w-full max-w-full" />
+        </div>
 
         <div className={`w-full overflow-hidden rounded-3xl ${card} p-4 max-[390px]:p-3`}>
           {!isLiffReady ? (

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/app/api/_lib/supabaseAdmin";
 import { requireAdmin } from "@/app/api/_lib/adminGuard";
+import { pushLineTextSafe } from "@/app/api/_lib/lineMessaging";
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,6 +27,12 @@ export async function POST(req: NextRequest) {
       p_note: body.note?.trim() ? body.note.trim() : null,
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    const fmt = (n: number) =>
+      new Intl.NumberFormat("th-TH", { maximumFractionDigits: 2 }).format(n);
+    await pushLineTextSafe({
+      to: body.userId,
+      text: `แอดมินปรับเครดิต ${amt >= 0 ? "+" : ""}${fmt(amt)} บ.\nเครดิตล่าสุดดูได้ที่แอป`,
+    });
     return NextResponse.json({ transaction: data });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Server error";

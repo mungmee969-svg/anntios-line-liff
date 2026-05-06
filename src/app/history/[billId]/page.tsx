@@ -1,0 +1,234 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
+import liff from "@line/liff";
+import { ensureLiffReady } from "@/src/lib/liffAuth";
+import { getBill, getBillRecords, type BillRow, type RecordRow } from "@/src/lib/supabase";
+
+function formatTHB(amount: number) {
+  return new Intl.NumberFormat("th-TH", {
+    style: "currency",
+    currency: "THB",
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+function formatDate(iso: string) {
+  const d = new Date(iso);
+  return new Intl.DateTimeFormat("th-TH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(d);
+}
+
+function statusLabel(status: BillRow["status"]) {
+  switch (status) {
+    case "pending":
+      return "รอดำเนินการ";
+    case "accepted":
+      return "รับแล้ว";
+    case "rejected":
+      return "ปฏิเสธ";
+    case "settled":
+      return "สรุปแล้ว";
+    case "cancelled":
+      return "ยกเลิก";
+  }
+}
+
+export default function BillDetailPage({ params }: { params: { billId: string } }) {
+  const billId = params.billId;
+  const [userId, setUserId] = useState<string | null>(null);
+  const [bill, setBill] = useState<BillRow | null>(null);
+  const [records, setRecords] = useState<RecordRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef({ aborted: false });
+
+  const total = useMemo(() => records.reduce((s, r) => s + r.amount, 0), [records]);
+
+  async function resendLineReceipt() {
+    if (!bill) return;
+    console.log("LINE CLIENT", liff.isInClient());
+    console.log("LOGGED IN", liff.isLoggedIn());
+
+    if (!liff.isInClient()) {
+      alert("ต้องเปิดผ่าน LINE");
+      return;
+    }
+
+    const fmtAmount = (n: number) => new Intl.NumberFormat("th-TH").format(n);
+    const divider = "━━━━━━━━━━━━━━";
+    const maxReceiptLines = 40;
+    const receiptRows = records.slice(0, maxReceiptLines);
+    const remaining = Math.max(0, records.length - maxReceiptLines);
+
+    const padRight = (s: string, len: number) =>
+      s.length >= len ? s : s + " ".repeat(len - s.length);
+    const padLeft = (s: string, len: number) =>
+      s.length >= len ? s : " ".repeat(len - s.length) + s;
+
+    const byNumber = new Map<string, RecordRow[]>();
+    for (const r of receiptRows) {
+      const arr = byNumber.get(r.number) ?? [];
+      arr.push(r);
+      byNumber.set(r.number, arr);
+    }
+
+    const lines: string[] = [];
+    lines.push("🧾 รวยไม่ไหว");
+    lines.push(divider);
+    lines.push("ใบสรุปรายการ");
+    lines.push("");
+    lines.push(`เลขบิล: ${bill.bill_no}`);
+    lines.push(`ลูกค้า: ${bill.display_name ?? userId ?? "-"}`);
+    lines.push(`หวย: ${bill.lottery_name ?? "-"}`);
+    lines.push(`ประเภท: ${bill.bet_type ?? "-"}`);
+    lines.push(`เวลา: ${formatDate(bill.created_at)}`);
+    lines.push(divider);
+    lines.push("");
+    lines.push("รายการ");
+
+    for (const [num, rows] of byNumber.entries()) {
+      const numberCol = padRight(num, 4);
+      const cells = rows
+        .map((r) => `${r.type} ${padLeft(fmtAmount(r.amount), 3)}`)
+        .join("   ");
+      lines.push(`${numberCol} ${cells}`.trimEnd());
+    }
+    if (remaining > 0) lines.push(`...และอีก ${remaining} รายการ`);
+
+    lines.push("");
+    lines.push(divider);
+    lines.push(`จำนวน: ${records.length} รายการ`);
+    lines.push(`รวมยอด: ${fmtAmount(bill.total_amount ?? total)} บาท`);
+    lines.push(`สถานะ: ${statusLabel(bill.status)}`);
+    lines.push(divider);
+    lines.push("");
+    lines.push("หากต้องการยกเลิก กรุณาแจ้งแอดมิน");
+
+    const summary = lines.join("\n");
+
+    try {
+      await liff.sendMessages([{ type: "text", text: summary }]);
+      alert("ส่งบิลเข้า LINE สำเร็จ");
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : "ส่ง LINE ไม่สำเร็จ";
+      alert(msg);
+    }
+  }
+
+  useEffect(() => {
+    abortRef.current.aborted = false;
+    const abortState = abortRef.current;
+    async function load() {
+      setIsLoading(true);
+      setError(null);
+      try {
+        await ensureLiffReady();
+        if (!liff.isLoggedIn()) {
+          liff.login();
+          return;
+        }
+        const p = await liff.getProfile();
+        if (abortState.aborted) return;
+        setUserId(p.userId);
+
+        const b = await getBill(billId);
+        if (abortState.aborted) return;
+        setBill(b);
+        const rs = await getBillRecords(billId);
+        if (abortState.aborted) return;
+        setRecords(rs);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "โหลดข้อมูลไม่สำเร็จ";
+        setError(msg);
+      } finally {
+        if (!abortState.aborted) setIsLoading(false);
+      }
+    }
+    load();
+    return () => {
+      abortState.aborted = true;
+    };
+  }, [billId]);
+
+  return (
+    <main className="min-h-screen bg-black text-white px-5 py-6">
+      <section className="max-w-md mx-auto">
+        <header className="flex items-center justify-between gap-3 mb-6">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">รายละเอียดบิล</h1>
+            <p className="text-sm text-zinc-500 break-all">{billId}</p>
+          </div>
+          <Link
+            href="/history"
+            className="rounded-2xl border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-200 transition-all duration-200 hover:bg-zinc-800/70 hover:-translate-y-0.5 active:scale-[0.99]"
+          >
+            กลับ
+          </Link>
+        </header>
+
+        {isLoading ? (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/30 px-4 py-3 text-sm text-zinc-300">
+            กำลังโหลด...
+          </div>
+        ) : error ? (
+          <div className="rounded-2xl border border-rose-900/50 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
+            {error}
+          </div>
+        ) : !bill ? (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/30 px-4 py-3 text-sm text-zinc-300">
+            ไม่พบบิล
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            <div className="rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-950 to-black p-5">
+              <p className="text-xs text-zinc-500">{bill.bill_no}</p>
+              <p className="text-sm font-semibold text-zinc-100 mt-1">
+                {bill.lottery_name ?? "-"} • {bill.bet_type ?? "-"}
+              </p>
+              <p className="text-xs text-zinc-500 mt-1">
+                {formatDate(bill.created_at)} • สถานะ: {statusLabel(bill.status)}
+              </p>
+              <div className="mt-4 flex items-end justify-between">
+                <p className="text-sm text-zinc-500">ยอดรวม</p>
+                <p className="text-base font-semibold">{formatTHB(bill.total_amount)}</p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={resendLineReceipt}
+              className="rounded-2xl border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm font-semibold text-zinc-100 transition-all duration-200 hover:bg-zinc-800/70 active:scale-[0.99]"
+            >
+              ส่งบิลเข้า LINE อีกครั้ง
+            </button>
+
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/30 px-4 py-3 text-xs text-zinc-400">
+              หากต้องการยกเลิก กรุณาแจ้งแอดมิน
+            </div>
+
+            <div className="grid gap-2">
+              {records.map((r) => (
+                <div
+                  key={r.id}
+                  className="rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-950 to-black px-4 py-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold">เลข {r.number}</p>
+                    <p className="text-xs text-zinc-500">{formatTHB(r.amount)}</p>
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-1">ประเภท: {r.type}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+    </main>
+  );
+}
+

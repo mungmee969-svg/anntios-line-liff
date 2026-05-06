@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import liff from "@line/liff";
+import { useCallback, useEffect, useState } from "react";
 import { useAdminGuard } from "@/src/components/AdminGuard";
+import { useLiffAuth } from "@/src/components/LiffAuthProvider";
 
 type Customer = {
   user_id: string;
@@ -21,20 +21,17 @@ function formatTHB(amount: number) {
   }).format(amount);
 }
 
-async function authedAdminFetch(input: RequestInfo, init: RequestInit = {}) {
-  const idToken = liff.getIDToken();
-  if (!idToken) throw new Error("Missing LINE id token");
-  const headers = new Headers(init.headers);
-  headers.set("authorization", `Bearer ${idToken}`);
-  return fetch(input, { ...init, headers });
-}
-
 export default function AdminCustomersPage() {
+  const { authFetch } = useLiffAuth();
+  const authedAdminFetch = useCallback(
+    (input: RequestInfo, init: RequestInit = {}) => authFetch(input, init),
+    [authFetch],
+  );
   const { isReady, isAdmin, error } = useAdminGuard();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     setIsLoading(true);
     try {
       const res = await authedAdminFetch("/api/admin/customers");
@@ -49,7 +46,7 @@ export default function AdminCustomersPage() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [authedAdminFetch]);
 
   async function adjustCredit(userId: string, displayName: string | null) {
     const raw = prompt("ใส่จำนวนเงิน (+เพิ่ม / -ลด)", "0") ?? "0";
@@ -75,7 +72,7 @@ export default function AdminCustomersPage() {
     if (!isReady || !isAdmin) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-  }, [isReady, isAdmin]);
+  }, [isReady, isAdmin, load]);
 
   if (!isReady) return <main className="min-h-screen bg-black text-white px-5 py-6">Loading...</main>;
   if (error) return <main className="min-h-screen bg-black text-white px-5 py-6">{error}</main>;
@@ -90,8 +87,11 @@ export default function AdminCustomersPage() {
             <p className="text-sm text-zinc-500">ดูเครดิตลูกค้าและปรับเครดิต</p>
           </div>
           <div className="flex gap-2">
-            <Link href="/admin" className="rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm">
-              เมนู
+            <Link
+              href="/admin/dashboard"
+              className="rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm"
+            >
+              แดชบอร์ด
             </Link>
             <button
               type="button"
