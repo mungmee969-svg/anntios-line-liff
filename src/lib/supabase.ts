@@ -2,6 +2,9 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 export type RecordType = "2 ตัว" | "3 ตัว" | "วิ่ง";
 
+const SUPABASE_URL = "https://ppeprvsejhtffodikclr.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_LCPec3vZVPz9rxlxCGKamQ_U84AZtF-";
+
 export type RecordRow = {
   id: string;
   user_id: string;
@@ -30,14 +33,8 @@ let _client: SupabaseClient | null = null;
 export function getSupabaseClient(): SupabaseClient {
   if (_client) return _client;
 
-  const url = getEnv("NEXT_PUBLIC_SUPABASE_URL");
-  const anonKey = getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
-
-  if (!url || !anonKey) {
-    throw new Error(
-      "Missing Supabase env. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
-    );
-  }
+  const url = getEnv("NEXT_PUBLIC_SUPABASE_URL") ?? SUPABASE_URL;
+  const anonKey = getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY") ?? SUPABASE_ANON_KEY;
 
   _client = createClient(url, anonKey, {
     auth: { persistSession: false, autoRefreshToken: false },
