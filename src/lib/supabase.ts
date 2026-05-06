@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-export type RecordType = "2 ตัว" | "3 ตัว" | "วิ่ง";
+export type RecordType = "บน" | "ล่าง" | "ตรง" | "โต๊ด";
 
 export type LotteryName =
   | "รัฐบาลไทย"
@@ -10,12 +10,13 @@ export type LotteryName =
   | "ฮานอยพัฒนา";
 
 export type BetType =
-  | "2 ตัว บน"
-  | "2 ตัว ล่าง"
-  | "3 ตัว บน"
-  | "3 ตัว โต๊ด"
-  | "วิ่งบน"
-  | "วิ่งล่าง";
+  | "2ตัว"
+  | "3ตัว"
+  | "6กลับ"
+  | "19ประตู"
+  | "วิ่ง"
+  | "วิน2"
+  | "วิน3";
 
 const SUPABASE_URL = "https://ppeprvsejhtffodikclr.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_LCPec3vZVPz9rxlxCGKamQ_U84AZtF-";
@@ -40,6 +41,18 @@ export type SaveRecordInput = {
   betType: BetType;
   amount: number;
   note?: string;
+};
+
+export type SaveRecordsInput = {
+  userId: string;
+  lotteryName: LotteryName;
+  betType: BetType;
+  note?: string;
+  items: Array<{
+    number: string;
+    type: RecordType;
+    amount: number;
+  }>;
 };
 
 function getEnv(name: "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_ANON_KEY") {
@@ -87,6 +100,36 @@ export async function saveRecord(input: SaveRecordInput): Promise<RecordRow> {
 
   if (error) throw new Error(error.message);
   return data as RecordRow;
+}
+
+export async function saveRecords(input: SaveRecordsInput): Promise<RecordRow[]> {
+  const supabase = getSupabaseClient();
+
+  if (!input.userId?.trim()) throw new Error("ยังไม่ได้เข้าสู่ระบบ LINE");
+  if (!input.lotteryName?.trim()) throw new Error("กรุณาเลือกชื่อหวย");
+  if (!input.betType?.trim()) throw new Error("กรุณาเลือกประเภทเดิมพัน");
+  if (!Array.isArray(input.items) || input.items.length === 0)
+    throw new Error("ยังไม่มีรายการ");
+
+  const rows = input.items.map((it) => {
+    const number = it.number.trim();
+    if (!number) throw new Error("กรุณากรอกเลข");
+    if (!Number.isFinite(it.amount) || it.amount <= 0)
+      throw new Error("กรุณากรอกจำนวนเงินที่ถูกต้อง");
+    return {
+      user_id: input.userId,
+      lottery_name: input.lotteryName,
+      bet_type: input.betType,
+      number,
+      type: it.type,
+      amount: it.amount,
+      note: input.note?.trim() ? input.note.trim() : null,
+    };
+  });
+
+  const { data, error } = await supabase.from("records").insert(rows).select("*");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as RecordRow[];
 }
 
 export async function getRecords(userId: string): Promise<RecordRow[]> {

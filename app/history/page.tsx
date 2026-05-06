@@ -31,6 +31,15 @@ function typePill(t: RecordRow["type"]) {
   );
 }
 
+function betModePill(v: RecordRow["bet_type"]) {
+  if (!v?.trim()) return null;
+  return (
+    <span className="rounded-full border border-cyan-400/15 bg-cyan-500/10 px-2.5 py-1 text-xs text-cyan-100">
+      {v}
+    </span>
+  );
+}
+
 function statusFromId(id: string): RecordStatus {
   let sum = 0;
   for (let i = 0; i < id.length; i++) sum = (sum + id.charCodeAt(i)) % 997;
@@ -141,7 +150,11 @@ export default function HistoryPage() {
                       <p className="text-sm font-semibold text-zinc-100">
                         {item.lottery_name ?? "-"}
                       </p>
-                      <p className="text-xs text-zinc-500">{item.bet_type ?? "-"}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        {betModePill(item.bet_type) ?? (
+                          <span className="text-xs text-zinc-500">-</span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2">
