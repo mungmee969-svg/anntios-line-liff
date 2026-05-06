@@ -72,15 +72,15 @@ export default function Home() {
             </p>
           </Link>
 
-          <button
-            type="button"
+          <Link
+            href="/history"
             className={`${cardBase} bg-zinc-900 border border-zinc-800 hover:bg-zinc-800/70`}
           >
             📜 ประวัติรายการ
             <p className="text-sm text-zinc-500 mt-1 font-normal">
               ดูรายการย้อนหลังทั้งหมด
             </p>
-          </button>
+          </Link>
 
           <button
             type="button"
@@ -92,15 +92,15 @@ export default function Home() {
             </p>
           </button>
 
-          <button
-            type="button"
+          <Link
+            href="/profile"
             className={`${cardBase} bg-zinc-900 border border-zinc-800 hover:bg-zinc-800/70`}
           >
             👤 โปรไฟล์สมาชิก
             <p className="text-sm text-zinc-500 mt-1 font-normal">
               ข้อมูลสมาชิกและสถานะการอนุมัติ
             </p>
-          </button>
+          </Link>
         </div>
       </section>
     </main>
