@@ -145,6 +145,7 @@ function tagKey(n: string) {
 
 export function QuickBetPremiumPage() {
   const [userId, setUserId] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const [isLiffReady, setIsLiffReady] = useState(false);
   const [lotteryName, setLotteryName] = useState<LotteryName | "">("");
   const [mode, setMode] = useState<BetType>("2ตัว");
@@ -158,6 +159,7 @@ export function QuickBetPremiumPage() {
   const [selectedDigits, setSelectedDigits] = useState<string[]>([]);
   const [generated, setGenerated] = useState<string[]>([]);
 
+  const [isLocked, setIsLocked] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState<ToastState>({ open: false });
   const toastTimerRef = useRef<number | null>(null);
@@ -199,6 +201,7 @@ export function QuickBetPremiumPage() {
     generated.length > 0 &&
     hasAtLeastOneAmount &&
     generated.length <= limit &&
+    !isLocked &&
     !isSubmitting;
 
   function showToast(tone: "success" | "error", message: string) {
@@ -214,6 +217,10 @@ export function QuickBetPremiumPage() {
   }
 
   function addNumbers(nums: string[]) {
+    if (isLocked) {
+      showToast("error", "รายการถูกส่งแล้ว หากต้องการยกเลิก กรุณาแจ้งแอดมิน");
+      return;
+    }
     const set = new Set(generated);
     for (const n of nums) set.add(n);
     // enforce mode limits while generating (avoid setState-in-effect)
@@ -229,12 +236,20 @@ export function QuickBetPremiumPage() {
   }
 
   function removeNumber(n: string) {
+    if (isLocked) {
+      showToast("error", "รายการถูกส่งแล้ว หากต้องการยกเลิก กรุณาแจ้งแอดมิน");
+      return;
+    }
     const set = new Set(generated);
     set.delete(n);
     setGeneratedFromSet(set);
   }
 
   function clearGenerated() {
+    if (isLocked) {
+      showToast("error", "รายการถูกส่งแล้ว หากต้องการยกเลิก กรุณาแจ้งแอดมิน");
+      return;
+    }
     setGenerated([]);
   }
 
@@ -244,6 +259,7 @@ export function QuickBetPremiumPage() {
     setSelectedDigits([]);
     clearGenerated();
     // keep amounts + memo (faster flow)
+    setIsLocked(false);
   }
 
   function addCurrentNumberToGenerated() {
@@ -269,9 +285,32 @@ export function QuickBetPremiumPage() {
     setInputNumber("");
   }
 
+  function reverse2(n: string) {
+    if (n.length !== 2) return null;
+    return n.split("").reverse().join("");
+  }
+
+  function reverseAnyFromGenerated() {
+    if (generated.length === 0) return showToast("error", "ยังไม่มีรายการ");
+    if (mode === "2ตัว" || mode === "วิน2") {
+      const out = generated.map((n) => reverse2(n)).filter(Boolean) as string[];
+      addNumbers(out);
+      return;
+    }
+    if (mode === "3ตัว" || mode === "6กลับ" || mode === "วิน3") {
+      const out = generated.flatMap((n) => (n.length === 3 ? permutations3(n) : []));
+      addNumbers(out);
+      return;
+    }
+    showToast("error", "โหมดนี้ไม่รองรับกลับเลข");
+  }
+
   function actionReverse() {
     const raw = clampDigits(inputNumber, maxNumberLen);
-    if (!raw) return showToast("error", "กรุณากรอกเลขก่อน");
+    if (!raw) {
+      reverseAnyFromGenerated();
+      return;
+    }
 
     if (mode === "2ตัว") {
       if (raw.length !== 2) return showToast("error", "โหมด 2ตัว ต้องกรอก 2 หลัก");
@@ -291,6 +330,18 @@ export function QuickBetPremiumPage() {
       return;
     }
 
+    if (mode === "วิน2") {
+      if (raw.length !== 2) return showToast("error", "โหมด วิน2 ต้องเป็น 2 หลัก");
+      addNumbers([raw.split("").reverse().join("")]);
+      return;
+    }
+
+    if (mode === "วิน3") {
+      if (raw.length !== 3) return showToast("error", "โหมด วิน3 ต้องเป็น 3 หลัก");
+      addNumbers(permutations3(raw));
+      return;
+    }
+
     showToast("error", "โหมดนี้ไม่รองรับกลับเลข");
   }
 
@@ -300,7 +351,10 @@ export function QuickBetPremiumPage() {
       return;
     }
     if (mode === "3ตัว") {
-      addNumbers(Array.from({ length: 10 }, (_, i) => `${i}${i}${i}`));
+      // 35 รายการตามสเปก (combinations with replacement 0-9)
+      addNumbers(
+        generateWin3(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"], true),
+      );
       return;
     }
     showToast("error", "โหมดนี้ไม่รองรับเลขเบิ้ล");
@@ -350,6 +404,7 @@ export function QuickBetPremiumPage() {
     if (generated.length === 0) return showToast("error", "ยังไม่มีรายการ");
     if (!hasAtLeastOneAmount) return showToast("error", "กรุณากรอกยอดอย่างน้อย 1 ช่อง");
     if (!applyModeRules()) return;
+    if (isLocked) return showToast("error", "รายการถูกส่งแล้ว หากต้องการยกเลิก กรุณาแจ้งแอดมิน");
 
     const items: Array<{ number: string; type: RecordType; amount: number }> = [];
 
@@ -371,6 +426,9 @@ export function QuickBetPremiumPage() {
 
     if (items.length === 0) return showToast("error", "กรุณากรอกยอดอย่างน้อย 1 ช่อง");
 
+    const createdAt = new Date().toISOString();
+    const total = items.reduce((sum, it) => sum + it.amount, 0);
+
     setIsSubmitting(true);
     try {
       await saveRecords({
@@ -380,10 +438,67 @@ export function QuickBetPremiumPage() {
         note: memo.trim() ? memo.trim() : undefined,
         items,
       });
-      showToast("success", "ส่งรายการซื้อเรียบร้อย");
-      setGenerated([]);
-      setInputNumber("");
-      setSelectedDigits([]);
+
+      setIsLocked(true);
+      showToast("success", "ส่งรายการซื้อเรียบร้อย (กำลังส่งบิลเข้า LINE)");
+
+      const maxLines = 50;
+      const listNumbers = generated.slice(0, maxLines);
+      const extraCount = Math.max(0, generated.length - maxLines);
+
+      const fmtAmount = (n: number) => new Intl.NumberFormat("th-TH").format(n);
+
+      const linePerNumber = (n: string) => {
+        const parts: string[] = [];
+        if (mode === "6กลับ") {
+          if (parsedTop !== null) parts.push(`บน ${fmtAmount(parsedTop)}`);
+        } else {
+          if (parsedTop !== null) parts.push(`${primaryType} ${fmtAmount(parsedTop)}`);
+          if (showBottom && parsedBottom !== null) parts.push(`ล่าง ${fmtAmount(parsedBottom)}`);
+          if (showTod && parsedTod !== null) parts.push(`โต๊ด ${fmtAmount(parsedTod)}`);
+        }
+        return `${n} / ${parts.join(" / ")}`;
+      };
+
+      const summaryLines = listNumbers.map(linePerNumber);
+      if (extraCount > 0) summaryLines.push(`…และอีก ${extraCount} รายการ`);
+
+      const customerText = [
+        "🧾 สรุปรายการ",
+        "",
+        `หวย: ${lotteryName}`,
+        `ประเภท: ${mode}`,
+        "",
+        `จำนวนรายการ: ${generated.length} รายการ`,
+        "",
+        "รายการ:",
+        ...summaryLines,
+        "",
+        `รวมยอด: ฿${fmtAmount(total)}`,
+        "",
+        "สถานะ: รอดำเนินการ",
+      ].join("\n");
+
+      const adminText = [
+        "🚨 มีรายการใหม่",
+        "",
+        `ลูกค้า: ${displayName ?? "-"}`,
+        "",
+        `userId: ${userId}`,
+        "",
+        `หวย: ${lotteryName}`,
+        `ประเภท: ${mode}`,
+        `จำนวน: ${generated.length}`,
+        `ยอดรวม: ฿${fmtAmount(total)}`,
+        `เวลา: ${createdAt}`,
+      ].join("\n");
+
+      try {
+        await liff.sendMessages([{ type: "text", text: customerText }, { type: "text", text: adminText }]);
+      } catch {
+        // IMPORTANT: do not rollback database
+        showToast("error", "บันทึกสำเร็จ แต่ส่งบิลเข้า LINE ไม่สำเร็จ");
+      }
     } catch (err) {
       showToast("error", err instanceof Error ? err.message : "ส่งรายการไม่สำเร็จ");
     } finally {
@@ -401,6 +516,7 @@ export function QuickBetPremiumPage() {
         }
         const p = await liff.getProfile();
         setUserId(p.userId);
+        setDisplayName(p.displayName ?? null);
       } catch {
         showToast("error", "ไม่สามารถเริ่มต้น LIFF ได้");
       } finally {
@@ -437,7 +553,7 @@ export function QuickBetPremiumPage() {
     "rounded-[18px] border border-zinc-900/10 bg-zinc-100/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_10px_24px_rgba(0,0,0,0.05)]";
 
   const input =
-    "w-full rounded-[16px] border border-zinc-900/10 bg-white/90 px-4 py-3 text-[15px] outline-none transition-all duration-200 focus:border-sky-400/50 focus:ring-2 focus:ring-sky-300/40";
+    "w-full rounded-[16px] border border-zinc-900/10 bg-white/90 px-4 py-3 text-[16px] outline-none transition-all duration-200 focus:border-sky-400/50 focus:ring-2 focus:ring-sky-300/40";
 
   const darkBtn =
     "inline-flex items-center justify-center gap-2 rounded-[18px] bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(15,23,42,0.25)] transition-all duration-200 active:scale-[0.99] disabled:opacity-55 disabled:shadow-none";
@@ -454,15 +570,15 @@ export function QuickBetPremiumPage() {
   const inactiveTab = "bg-transparent text-slate-700 hover:bg-white/60";
 
   const submitBar =
-    "fixed bottom-0 left-0 right-0 border-t border-emerald-900/10 bg-white/70 backdrop-blur px-5 py-4";
+    "fixed bottom-0 left-0 right-0 border-t border-emerald-900/10 bg-white/70 backdrop-blur px-5 pt-4 pb-[calc(16px+env(safe-area-inset-bottom))]";
 
   const submitBtn =
     "w-full rounded-[20px] bg-gradient-to-b from-slate-950 to-slate-900 px-5 py-4 text-base font-bold text-white shadow-[0_14px_40px_rgba(15,23,42,0.30)] transition-all duration-200 active:scale-[0.99] disabled:opacity-55";
 
   return (
     <main className={pageBg}>
-      <section className="mx-auto w-full max-w-md px-5 pb-28 pt-6">
-        <header className="mb-4 flex items-center justify-between">
+      <section className="mx-auto w-full max-w-[480px] px-4 pb-[calc(120px+env(safe-area-inset-bottom))] pt-6">
+        <header className="mb-3 flex items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-extrabold tracking-tight">บันทึกรายการ</h1>
             <p className="text-sm text-emerald-900/60">
@@ -522,8 +638,8 @@ export function QuickBetPremiumPage() {
               <label className="text-sm font-semibold text-slate-900">
                 เลือกประเภทแทง
               </label>
-              <div className={tabWrap}>
-                <div className="flex gap-1 overflow-x-auto no-scrollbar">
+              <div className={`${tabWrap} sticky top-3 z-10`}>
+                <div className="flex h-11 gap-1 overflow-x-auto no-scrollbar items-center">
                   {MODES.map((m) => {
                     const active = mode === m;
                     return (
@@ -547,7 +663,7 @@ export function QuickBetPremiumPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-slate-900">
-                  generatedNumbers
+                  รายการเลข
                 </span>
                 <span
                   className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-extrabold ${counterClass}`}
@@ -560,7 +676,7 @@ export function QuickBetPremiumPage() {
                 onClick={clearGenerated}
                 className="text-sm font-semibold text-slate-700 hover:text-slate-900"
               >
-                ล้างรายการ
+                ล้างทั้งหมด
               </button>
             </div>
 
@@ -598,7 +714,7 @@ export function QuickBetPremiumPage() {
                         <button
                           type="button"
                           onClick={() => removeNumber(n)}
-                          className="rounded-full bg-emerald-700/70 p-1 transition-all active:scale-[0.98]"
+                          className="rounded-full bg-emerald-700/70 p-1.5 transition-all active:scale-[0.98]"
                           aria-label={`ลบ ${n}`}
                         >
                           <X className="h-3.5 w-3.5" />
@@ -613,25 +729,23 @@ export function QuickBetPremiumPage() {
             <div className={`${insetCard} grid gap-3 p-4`}>
               <div className="grid gap-2">
                 <label className="text-sm font-semibold text-slate-900">เลข</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    value={inputNumber}
-                    onChange={(e) => setInputNumber(clampDigits(e.target.value, maxNumberLen))}
-                    inputMode="numeric"
-                    placeholder={
-                      mode === "19ประตู" || mode === "วิ่ง" ? "0-9" : mode === "2ตัว" ? "00-99" : "000-999"
-                    }
-                    className={input}
-                  />
-                  <button
-                    type="button"
-                    onClick={addCurrentNumberToGenerated}
-                    className={`${darkBtnSecondary} px-3`}
-                  >
-                    <BadgePlus className="h-4 w-4" />
-                    เพิ่ม
-                  </button>
-                </div>
+                <input
+                  value={inputNumber}
+                  onChange={(e) => setInputNumber(clampDigits(e.target.value, maxNumberLen))}
+                  inputMode="numeric"
+                  placeholder={
+                    mode === "19ประตู" || mode === "วิ่ง" ? "0-9" : mode === "2ตัว" ? "00-99" : "000-999"
+                  }
+                  className={input}
+                />
+                <button
+                  type="button"
+                  onClick={addCurrentNumberToGenerated}
+                  className={`${darkBtnSecondary} h-12`}
+                >
+                  <BadgePlus className="h-4 w-4" />
+                  เพิ่มเลข
+                </button>
               </div>
 
               {showDigitPad && (
@@ -677,7 +791,7 @@ export function QuickBetPremiumPage() {
 
               <div className="grid gap-2">
                 <p className="text-sm font-semibold text-slate-900">ยอดแทง</p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div className="grid gap-1">
                     <label className="text-xs font-bold text-slate-600">
                       {mode === "3ตัว" ? "ตรง" : mode === "วิน3" ? "บน" : "บน"}
@@ -728,11 +842,11 @@ export function QuickBetPremiumPage() {
               <div className="grid gap-2">
                 <p className="text-sm font-semibold text-slate-900">Action</p>
                 <div className="grid grid-cols-2 gap-2">
-                  <button type="button" onClick={actionReverse} className={darkBtn}>
+                  <button type="button" onClick={actionReverse} className={`${darkBtn} h-12`}>
                     <ArrowLeftRight className="h-4 w-4" />
                     กลับเลข
                   </button>
-                  <button type="button" onClick={actionDouble} className={darkBtn}>
+                  <button type="button" onClick={actionDouble} className={`${darkBtn} h-12`}>
                     <Sparkles className="h-4 w-4" />
                     เลขเบิ้ล
                   </button>
@@ -740,11 +854,11 @@ export function QuickBetPremiumPage() {
 
                 {(mode === "วิน2" || mode === "วิน3") && (
                   <div className="grid grid-cols-2 gap-2">
-                    <button type="button" onClick={() => actionWin(false)} className={darkBtn}>
+                    <button type="button" onClick={() => actionWin(false)} className={`${darkBtn} h-12`}>
                       <Shuffle className="h-4 w-4" />
                       วินเลข
                     </button>
-                    <button type="button" onClick={() => actionWin(true)} className={darkBtn}>
+                    <button type="button" onClick={() => actionWin(true)} className={`${darkBtn} h-12`}>
                       <Dice5 className="h-4 w-4" />
                       วินเลขเบิ้ล
                     </button>
@@ -752,7 +866,7 @@ export function QuickBetPremiumPage() {
                 )}
 
                 {mode === "19ประตู" && (
-                  <button type="button" onClick={action19Doors} className={darkBtn}>
+                  <button type="button" onClick={action19Doors} className={`${darkBtn} h-12`}>
                     <CopyX className="h-4 w-4" />
                     สร้าง 19 ประตู
                   </button>
@@ -765,7 +879,7 @@ export function QuickBetPremiumPage() {
                       setInputNumber("");
                       setSelectedDigits([]);
                     }}
-                    className={darkBtnSecondary}
+                    className={`${darkBtnSecondary} h-12`}
                   >
                     <Eraser className="h-4 w-4" />
                     เคลียร์ฟอร์ม
@@ -781,7 +895,7 @@ export function QuickBetPremiumPage() {
                       setAmountTod("");
                       setMemo("");
                     }}
-                    className={darkBtnSecondary}
+                    className={`${darkBtnSecondary} h-12`}
                   >
                     <Eraser className="h-4 w-4" />
                     เคลียร์ทั้งหมด
@@ -806,7 +920,32 @@ export function QuickBetPremiumPage() {
       </section>
 
       <div className={submitBar}>
-        <div className="mx-auto w-full max-w-md">
+        <div className="mx-auto w-full max-w-[480px]">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-semibold text-slate-800">
+              {generated.length} รายการ
+            </span>
+            <span className="text-sm font-extrabold text-amber-800">
+              ฿
+              {new Intl.NumberFormat("th-TH").format(
+                (() => {
+                  const itemsPerNumber =
+                    mode === "6กลับ"
+                      ? (parsedTop !== null ? 1 : 0)
+                      : (parsedTop !== null ? 1 : 0) +
+                        (showBottom && parsedBottom !== null ? 1 : 0) +
+                        (showTod && parsedTod !== null ? 1 : 0);
+                  const perNumberTotal =
+                    (parsedTop ?? 0) +
+                    (showBottom ? parsedBottom ?? 0 : 0) +
+                    (showTod ? parsedTod ?? 0 : 0);
+                  if (itemsPerNumber === 0) return 0;
+                  if (mode === "6กลับ") return generated.length * (parsedTop ?? 0);
+                  return generated.length * perNumberTotal;
+                })(),
+              )}
+            </span>
+          </div>
           <button type="button" onClick={submit} disabled={!canSubmit} className={submitBtn}>
             <span className="inline-flex items-center justify-center gap-2">
               {isSubmitting ? (
@@ -823,7 +962,7 @@ export function QuickBetPremiumPage() {
             </span>
           </button>
           <p className="mt-2 text-center text-xs text-emerald-900/60">
-            ต้องเลือกชื่อหวย • ต้องมีรายการ • ต้องกรอกยอดอย่างน้อย 1 ช่อง
+            ต้องเลือกชื่อหวย • ต้องมีรายการ • ต้องกรอกยอดอย่างน้อย 1 ช่อง • ส่งแล้วจะล็อกบิล
           </p>
         </div>
       </div>
