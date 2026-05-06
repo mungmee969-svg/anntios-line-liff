@@ -163,6 +163,7 @@ export function QuickBetPremiumPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState<ToastState>({ open: false });
   const toastTimerRef = useRef<number | null>(null);
+  const lastAutoRef = useRef<string>("");
 
   const limit = useMemo(() => modeLimit(mode), [mode]);
   const countTone = useMemo(() => counterTone(generated.length, limit), [generated.length, limit]);
@@ -283,6 +284,47 @@ export function QuickBetPremiumPage() {
 
     addNumbers([raw]);
     setInputNumber("");
+  }
+
+  function onNumberInputChange(nextRaw: string) {
+    const raw = clampDigits(nextRaw, maxNumberLen);
+    setInputNumber(raw);
+    if (!raw) return;
+
+    const key = `${mode}:${raw}`;
+    if (lastAutoRef.current === key) return;
+
+    if (mode === "19ประตู") {
+      if (raw.length !== 1) return;
+      lastAutoRef.current = key;
+      addNumbers(generate19Doors(raw));
+      setInputNumber("");
+      return;
+    }
+
+    if (mode === "6กลับ") {
+      if (raw.length !== 3) return;
+      lastAutoRef.current = key;
+      addNumbers(permutations3(raw));
+      setInputNumber("");
+      return;
+    }
+
+    if (mode === "2ตัว") {
+      if (raw.length !== 2) return;
+      lastAutoRef.current = key;
+      addNumbers([raw]);
+      setInputNumber("");
+      return;
+    }
+
+    if (mode === "3ตัว") {
+      if (raw.length !== 3) return;
+      lastAutoRef.current = key;
+      addNumbers([raw]);
+      setInputNumber("");
+      return;
+    }
   }
 
   function reverse2(n: string) {
@@ -564,11 +606,6 @@ export function QuickBetPremiumPage() {
   const tabWrap =
     "rounded-[18px] border border-emerald-900/10 bg-white/65 p-1.5 shadow-[0_10px_26px_rgba(16,185,129,0.10)]";
 
-  const activeTab =
-    "bg-gradient-to-b from-cyan-400 to-sky-500 text-white shadow-[0_10px_30px_rgba(56,189,248,0.35)] scale-[1.02]";
-
-  const inactiveTab = "bg-transparent text-slate-700 hover:bg-white/60";
-
   const submitBar =
     "fixed bottom-0 left-0 right-0 border-t border-emerald-900/10 bg-white/70 backdrop-blur px-5 pt-4 pb-[calc(16px+env(safe-area-inset-bottom))]";
 
@@ -640,8 +677,8 @@ export function QuickBetPremiumPage() {
               <label className="text-sm font-semibold text-slate-900">
                 เลือกประเภทแทง
               </label>
-              <div className={`${tabWrap} sticky top-3 z-10 w-full max-w-full overflow-hidden`}>
-                <div className="flex h-11 gap-1 overflow-x-auto whitespace-nowrap no-scrollbar items-center w-full max-w-full">
+              <div className={`${tabWrap} w-full max-w-full overflow-hidden`}>
+                <div className="grid grid-cols-4 max-[390px]:grid-cols-3 gap-2 w-full max-w-full">
                   {MODES.map((m) => {
                     const active = mode === m;
                     return (
@@ -649,8 +686,10 @@ export function QuickBetPremiumPage() {
                         key={m}
                         type="button"
                         onClick={() => onChangeMode(m)}
-                        className={`flex-shrink-0 rounded-[16px] px-4 py-2 text-sm max-[390px]:text-xs font-extrabold transition-all duration-200 ${
-                          active ? activeTab : inactiveTab
+                        className={`h-11 w-full max-w-full rounded-xl px-2 text-[15px] max-[390px]:text-sm font-extrabold transition-all duration-200 ${
+                          active
+                            ? "bg-gradient-to-b from-cyan-400 to-sky-500 text-white shadow-[0_10px_30px_rgba(56,189,248,0.35)]"
+                            : "bg-white/75 text-slate-700 border border-emerald-900/10 shadow-sm hover:bg-white/90"
                         }`}
                         aria-pressed={active}
                       >
@@ -733,7 +772,7 @@ export function QuickBetPremiumPage() {
                 <label className="text-sm font-semibold text-slate-900">เลข</label>
                 <input
                   value={inputNumber}
-                  onChange={(e) => setInputNumber(clampDigits(e.target.value, maxNumberLen))}
+                    onChange={(e) => onNumberInputChange(e.target.value)}
                   inputMode="numeric"
                   placeholder={
                     mode === "19ประตู" || mode === "วิ่ง" ? "0-9" : mode === "2ตัว" ? "00-99" : "000-999"
