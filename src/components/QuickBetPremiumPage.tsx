@@ -577,11 +577,13 @@ export function QuickBetPremiumPage() {
 
   return (
     <main className={pageBg}>
-      <section className="mx-auto w-full max-w-[480px] px-4 pb-[calc(120px+env(safe-area-inset-bottom))] pt-6">
-        <header className="mb-3 flex items-center justify-between gap-3">
+      <section className="max-w-md mx-auto w-full px-4 max-[390px]:px-3 pb-[calc(120px+env(safe-area-inset-bottom))] pt-6">
+        <header className="mb-3 flex items-center justify-between gap-3 w-full max-w-full">
           <div>
-            <h1 className="text-xl font-extrabold tracking-tight">บันทึกรายการ</h1>
-            <p className="text-sm text-emerald-900/60">
+            <h1 className="text-xl max-[390px]:text-lg font-extrabold tracking-tight">
+              บันทึกรายการ
+            </h1>
+            <p className="text-sm max-[390px]:text-xs text-emerald-900/60">
               แทงเร็ว • มือเดียว • Premium
             </p>
           </div>
@@ -593,7 +595,7 @@ export function QuickBetPremiumPage() {
           </Link>
         </header>
 
-        <div className={`${card} p-4`}>
+        <div className={`w-full overflow-hidden rounded-3xl ${card} p-4 max-[390px]:p-3`}>
           {!isLiffReady ? (
             <div className="rounded-[16px] border border-emerald-900/10 bg-white/70 px-4 py-3 text-sm text-slate-700">
               กำลังเชื่อมต่อ LINE...
@@ -608,16 +610,16 @@ export function QuickBetPremiumPage() {
             </div>
           )}
 
-          <div className="mt-4 grid gap-3">
-            <div className="grid gap-2">
+          <div className="mt-4 grid gap-3 w-full max-w-full">
+            <div className="grid gap-2 w-full max-w-full">
               <label className="text-sm font-semibold text-slate-900">
                 เลือกชื่อหวย
               </label>
-              <div className="relative">
+              <div className="relative w-full max-w-full box-border">
                 <select
                   value={lotteryName}
                   onChange={(e) => setLotteryName(e.target.value as LotteryName)}
-                  className={`${input} appearance-none pr-10`}
+                  className={`${input} w-full max-w-full box-border appearance-none pr-10`}
                 >
                   <option value="" disabled>
                     เลือกชื่อหวย...
@@ -634,12 +636,12 @@ export function QuickBetPremiumPage() {
               </div>
             </div>
 
-            <div className="grid gap-2">
+            <div className="grid gap-2 w-full max-w-full">
               <label className="text-sm font-semibold text-slate-900">
                 เลือกประเภทแทง
               </label>
-              <div className={`${tabWrap} sticky top-3 z-10`}>
-                <div className="flex h-11 gap-1 overflow-x-auto no-scrollbar items-center">
+              <div className={`${tabWrap} sticky top-3 z-10 w-full max-w-full overflow-hidden`}>
+                <div className="flex h-11 gap-1 overflow-x-auto whitespace-nowrap no-scrollbar items-center w-full max-w-full">
                   {MODES.map((m) => {
                     const active = mode === m;
                     return (
@@ -647,7 +649,7 @@ export function QuickBetPremiumPage() {
                         key={m}
                         type="button"
                         onClick={() => onChangeMode(m)}
-                        className={`shrink-0 rounded-[16px] px-4 py-2 text-sm font-extrabold transition-all duration-200 ${
+                        className={`flex-shrink-0 rounded-[16px] px-4 py-2 text-sm max-[390px]:text-xs font-extrabold transition-all duration-200 ${
                           active ? activeTab : inactiveTab
                         }`}
                         aria-pressed={active}
@@ -660,7 +662,7 @@ export function QuickBetPremiumPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between w-full max-w-full">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-slate-900">
                   รายการเลข
@@ -680,7 +682,7 @@ export function QuickBetPremiumPage() {
               </button>
             </div>
 
-            <div className="rounded-[18px] border border-emerald-900/10 bg-emerald-50/70 p-3">
+            <div className="rounded-[18px] border border-emerald-900/10 bg-emerald-50/70 p-3 w-full max-w-full overflow-hidden">
               <AnimatePresence initial={false}>
                 {generated.length === 0 ? (
                   <motion.p
@@ -698,7 +700,7 @@ export function QuickBetPremiumPage() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="flex flex-wrap gap-2"
+                    className="flex flex-wrap gap-2 w-full max-w-full overflow-hidden"
                   >
                     {generated.map((n) => (
                       <motion.span
@@ -726,8 +728,8 @@ export function QuickBetPremiumPage() {
               </AnimatePresence>
             </div>
 
-            <div className={`${insetCard} grid gap-3 p-4`}>
-              <div className="grid gap-2">
+            <div className={`${insetCard} grid gap-3 p-4 w-full max-w-full overflow-hidden`}>
+              <div className="grid gap-2 w-full max-w-full">
                 <label className="text-sm font-semibold text-slate-900">เลข</label>
                 <input
                   value={inputNumber}
@@ -736,12 +738,12 @@ export function QuickBetPremiumPage() {
                   placeholder={
                     mode === "19ประตู" || mode === "วิ่ง" ? "0-9" : mode === "2ตัว" ? "00-99" : "000-999"
                   }
-                  className={input}
+                  className={`${input} w-full max-w-full`}
                 />
                 <button
                   type="button"
                   onClick={addCurrentNumberToGenerated}
-                  className={`${darkBtnSecondary} h-12`}
+                  className={`${darkBtnSecondary} h-12 w-full max-w-full`}
                 >
                   <BadgePlus className="h-4 w-4" />
                   เพิ่มเลข
@@ -749,11 +751,11 @@ export function QuickBetPremiumPage() {
               </div>
 
               {showDigitPad && (
-                <div className="grid gap-2">
+                <div className="grid gap-2 w-full max-w-full">
                   <p className="text-sm font-semibold text-slate-900">
                     เลือกเลข (สูงสุด 5 ตัว)
                   </p>
-                  <div className="grid grid-cols-5 gap-2">
+                  <div className="grid grid-cols-5 gap-2 w-full max-w-full">
                     {["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].map((d) => {
                       const active = selectedDigits.includes(d);
                       return (
@@ -772,7 +774,7 @@ export function QuickBetPremiumPage() {
                       );
                     })}
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 w-full max-w-full overflow-hidden">
                     {selectedDigits.length === 0 ? (
                       <span className="text-xs text-slate-600">ยังไม่ได้เลือก</span>
                     ) : (
@@ -789,7 +791,7 @@ export function QuickBetPremiumPage() {
                 </div>
               )}
 
-              <div className="grid gap-2">
+              <div className="grid gap-2 w-full max-w-full">
                 <p className="text-sm font-semibold text-slate-900">ยอดแทง</p>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div className="grid gap-1">
@@ -801,7 +803,7 @@ export function QuickBetPremiumPage() {
                       onChange={(e) => setAmountTop(e.target.value)}
                       inputMode="decimal"
                       placeholder="0"
-                      className={input}
+                      className={`${input} w-full max-w-full`}
                     />
                   </div>
 
@@ -813,7 +815,7 @@ export function QuickBetPremiumPage() {
                         onChange={(e) => setAmountBottom(e.target.value)}
                         inputMode="decimal"
                         placeholder="0"
-                        className={input}
+                        className={`${input} w-full max-w-full`}
                       />
                     </div>
                   ) : showTod ? (
@@ -824,7 +826,7 @@ export function QuickBetPremiumPage() {
                         onChange={(e) => setAmountTod(e.target.value)}
                         inputMode="decimal"
                         placeholder="0"
-                        className={input}
+                        className={`${input} w-full max-w-full`}
                       />
                     </div>
                   ) : (
@@ -839,7 +841,7 @@ export function QuickBetPremiumPage() {
                 </p>
               </div>
 
-              <div className="grid gap-2">
+              <div className="grid gap-2 w-full max-w-full">
                 <p className="text-sm font-semibold text-slate-900">Action</p>
                 <div className="grid grid-cols-2 gap-2">
                   <button type="button" onClick={actionReverse} className={`${darkBtn} h-12`}>
@@ -903,7 +905,7 @@ export function QuickBetPremiumPage() {
                 </div>
               </div>
 
-              <div className="grid gap-2">
+              <div className="grid gap-2 w-full max-w-full">
                 <label className="text-sm font-semibold text-slate-900">
                   บันทึกช่วยจำ
                 </label>
@@ -911,7 +913,7 @@ export function QuickBetPremiumPage() {
                   value={memo}
                   onChange={(e) => setMemo(e.target.value)}
                   placeholder="เช่น ชื่อลูกค้า / เงื่อนไข / โน้ต"
-                  className={`${input} min-h-[92px] resize-none`}
+                  className={`${input} min-h-[92px] resize-none w-full max-w-full`}
                 />
               </div>
             </div>
