@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-
-type RecordType = "2 ตัว" | "3 ตัว" | "วิ่ง";
+import { useEffect, useMemo, useRef, useState } from "react";
+import liff from "@line/liff";
+import { saveRecord, type RecordType } from "@/src/lib/supabase";
 
 type RecordDraft = {
   number: string;
@@ -11,17 +11,6 @@ type RecordDraft = {
   type: RecordType;
   note: string;
 };
-
-type StoredRecord = {
-  id: string;
-  createdAt: string;
-  number: string;
-  amount: number;
-  type: RecordType;
-  note?: string;
-};
-
-const STORAGE_KEY = "anntios.records.v1";
 
 function safeParseAmount(raw: string): number | null {
   const normalized = raw.replace(/,/g, "").trim();
@@ -32,26 +21,16 @@ function safeParseAmount(raw: string): number | null {
   return num;
 }
 
-function safeLoadRecords(): StoredRecord[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed as StoredRecord[];
-  } catch {
-    return [];
-  }
-}
-
-function safeSaveRecords(records: StoredRecord[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-}
+type ToastState =
+  | { open: false }
+  | { open: true; tone: "success" | "error"; message: string };
 
 const inputBase =
   "w-full rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-white placeholder:text-zinc-600 shadow-sm outline-none transition-all duration-200 focus:border-zinc-600 focus:ring-2 focus:ring-white/10";
 
 export default function RecordPage() {
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isLiffReady, setIsLiffReady] = useState(false);
   const [draft, setDraft] = useState<RecordDraft>({
     number: "",
     amount: "",
@@ -59,8 +38,43 @@ export default function RecordPage() {
     note: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState>({ open: false });
+  const toastTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    async function init() {
+      try {
+        await liff.init({ liffId: "2009989826-L6OPDoa5" });
+        if (!liff.isLoggedIn()) {
+          liff.login();
+          return;
+        }
+        const p = await liff.getProfile();
+        setUserId(p.userId);
+      } catch {
+        setToast({
+          open: true,
+          tone: "error",
+          message: "ไม่สามารถเริ่มต้น LIFF ได้",
+        });
+      } finally {
+        setIsLiffReady(true);
+      }
+    }
+
+    init();
+    return () => {
+      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    };
+  }, []);
+
+  function showToast(tone: "success" | "error", message: string) {
+    setToast({ open: true, tone, message });
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast({ open: false });
+    }, 2600);
+  }
 
   const parsedAmount = useMemo(
     () => safeParseAmount(draft.amount),
@@ -68,12 +82,13 @@ export default function RecordPage() {
   );
 
   const canSubmit =
-    draft.number.trim().length > 0 && parsedAmount !== null && !isSubmitting;
+    !!userId &&
+    draft.number.trim().length > 0 &&
+    parsedAmount !== null &&
+    !isSubmitting;
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setSuccess(null);
 
     const number = draft.number.trim();
     const amount = safeParseAmount(draft.amount);
@@ -81,34 +96,34 @@ export default function RecordPage() {
     const note = draft.note.trim();
 
     if (!number) {
-      setError("กรุณากรอกเลข");
+      showToast("error", "กรุณากรอกเลข");
       return;
     }
     if (amount === null) {
-      setError("กรุณากรอกจำนวนเงินที่ถูกต้อง");
+      showToast("error", "กรุณากรอกจำนวนเงินที่ถูกต้อง");
+      return;
+    }
+    if (!userId) {
+      showToast("error", "ยังไม่ได้เข้าสู่ระบบ LINE");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const records = safeLoadRecords();
-      const next: StoredRecord = {
-        id:
-          typeof crypto !== "undefined" && "randomUUID" in crypto
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        createdAt: new Date().toISOString(),
+      await saveRecord({
+        userId,
         number,
-        amount,
         type,
+        amount,
         note: note ? note : undefined,
-      };
-      safeSaveRecords([next, ...records].slice(0, 500));
+      });
 
       setDraft({ number: "", amount: "", type: "2 ตัว", note: "" });
-      setSuccess("บันทึกรายการเรียบร้อย");
-    } catch {
-      setError("บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+      showToast("success", "บันทึกรายการเรียบร้อย");
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง";
+      showToast("error", msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -135,6 +150,20 @@ export default function RecordPage() {
 
         <div className="rounded-xl border border-zinc-800 bg-gradient-to-b from-zinc-950 to-black p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_16px_40px_rgba(0,0,0,0.6)]">
           <form onSubmit={onSubmit} className="grid gap-4">
+            {!isLiffReady ? (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 px-4 py-3 text-sm text-zinc-300">
+                กำลังเชื่อมต่อ LINE...
+              </div>
+            ) : !userId ? (
+              <div className="rounded-xl border border-rose-900/50 bg-rose-950/25 px-4 py-3 text-sm text-rose-200">
+                ยังไม่ได้เข้าสู่ระบบ LINE (กำลังพยายามนำไปล็อกอิน)
+              </div>
+            ) : (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 px-4 py-3 text-xs text-zinc-400 break-all">
+                userId: {userId}
+              </div>
+            )}
+
             <div className="grid gap-2">
               <label htmlFor="number" className="text-sm font-medium">
                 เลข
@@ -212,19 +241,6 @@ export default function RecordPage() {
               />
             </div>
 
-            {(error || success) && (
-              <div
-                role="status"
-                className={`rounded-xl border px-4 py-3 text-sm ${
-                  error
-                    ? "border-rose-900/50 bg-rose-950/30 text-rose-200"
-                    : "border-emerald-900/50 bg-emerald-950/25 text-emerald-200"
-                }`}
-              >
-                {error ?? success}
-              </div>
-            )}
-
             <button
               type="submit"
               disabled={!canSubmit}
@@ -234,6 +250,21 @@ export default function RecordPage() {
             </button>
           </form>
         </div>
+
+        {toast.open && (
+          <div className="fixed left-0 right-0 bottom-5 px-5">
+            <div
+              role="status"
+              className={`mx-auto max-w-md rounded-2xl border px-4 py-3 text-sm backdrop-blur ${
+                toast.tone === "success"
+                  ? "border-emerald-900/50 bg-emerald-950/35 text-emerald-100"
+                  : "border-rose-900/50 bg-rose-950/35 text-rose-100"
+              }`}
+            >
+              {toast.message}
+            </div>
+          </div>
+        )}
       </section>
     </main>
   );
