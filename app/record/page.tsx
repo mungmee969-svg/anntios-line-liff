@@ -3,14 +3,43 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import liff from "@line/liff";
-import { saveRecord, type RecordType } from "@/src/lib/supabase";
+import {
+  saveRecord,
+  type BetType,
+  type LotteryName,
+  type RecordType,
+} from "@/src/lib/supabase";
 
 type RecordDraft = {
+  lotteryName: LotteryName | "";
   number: string;
+  betType: BetType | "";
   amount: string;
-  type: RecordType;
   note: string;
 };
+
+const LOTTERY_OPTIONS: readonly LotteryName[] = [
+  "รัฐบาลไทย",
+  "ลาวพัฒนา",
+  "ฮานอย",
+  "ฮานอย VIP",
+  "ฮานอยพัฒนา",
+] as const;
+
+const BET_TYPES: readonly BetType[] = [
+  "2 ตัว บน",
+  "2 ตัว ล่าง",
+  "3 ตัว บน",
+  "3 ตัว โต๊ด",
+  "วิ่งบน",
+  "วิ่งล่าง",
+] as const;
+
+function recordTypeFromBetType(betType: BetType): RecordType {
+  if (betType.startsWith("2 ตัว")) return "2 ตัว";
+  if (betType.startsWith("3 ตัว")) return "3 ตัว";
+  return "วิ่ง";
+}
 
 function safeParseAmount(raw: string): number | null {
   const normalized = raw.replace(/,/g, "").trim();
@@ -32,9 +61,10 @@ export default function RecordPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [isLiffReady, setIsLiffReady] = useState(false);
   const [draft, setDraft] = useState<RecordDraft>({
+    lotteryName: "",
     number: "",
+    betType: "",
     amount: "",
-    type: "2 ตัว",
     note: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -83,6 +113,8 @@ export default function RecordPage() {
 
   const canSubmit =
     !!userId &&
+    draft.lotteryName.trim().length > 0 &&
+    draft.betType.trim().length > 0 &&
     draft.number.trim().length > 0 &&
     parsedAmount !== null &&
     !isSubmitting;
@@ -90,11 +122,20 @@ export default function RecordPage() {
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
+    const lotteryName = draft.lotteryName;
     const number = draft.number.trim();
+    const betType = draft.betType;
     const amount = safeParseAmount(draft.amount);
-    const type = draft.type;
     const note = draft.note.trim();
 
+    if (!lotteryName) {
+      showToast("error", "กรุณาเลือกชื่อหวย");
+      return;
+    }
+    if (!betType) {
+      showToast("error", "กรุณาเลือกประเภทเดิมพัน");
+      return;
+    }
     if (!number) {
       showToast("error", "กรุณากรอกเลข");
       return;
@@ -112,13 +153,21 @@ export default function RecordPage() {
     try {
       await saveRecord({
         userId,
+        lotteryName,
         number,
-        type,
+        betType,
+        type: recordTypeFromBetType(betType),
         amount,
         note: note ? note : undefined,
       });
 
-      setDraft({ number: "", amount: "", type: "2 ตัว", note: "" });
+      setDraft({
+        lotteryName: "",
+        number: "",
+        betType: "",
+        amount: "",
+        note: "",
+      });
       showToast("success", "บันทึกรายการเรียบร้อย");
     } catch (err) {
       const msg =
@@ -165,6 +214,33 @@ export default function RecordPage() {
             )}
 
             <div className="grid gap-2">
+              <label htmlFor="lotteryName" className="text-sm font-medium">
+                ชื่อหวย
+              </label>
+              <select
+                id="lotteryName"
+                name="lotteryName"
+                value={draft.lotteryName}
+                onChange={(e) =>
+                  setDraft((d) => ({
+                    ...d,
+                    lotteryName: e.target.value as LotteryName,
+                  }))
+                }
+                className={`${inputBase} appearance-none`}
+              >
+                <option value="" disabled>
+                  เลือกชื่อหวย...
+                </option>
+                {LOTTERY_OPTIONS.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid gap-2">
               <label htmlFor="number" className="text-sm font-medium">
                 เลข
               </label>
@@ -204,25 +280,42 @@ export default function RecordPage() {
             </div>
 
             <div className="grid gap-2">
-              <label htmlFor="type" className="text-sm font-medium">
-                ประเภท
-              </label>
-              <select
-                id="type"
-                name="type"
-                value={draft.type}
-                onChange={(e) =>
-                  setDraft((d) => ({
-                    ...d,
-                    type: e.target.value as RecordType,
-                  }))
-                }
-                className={`${inputBase} appearance-none`}
-              >
-                <option value="2 ตัว">2 ตัว</option>
-                <option value="3 ตัว">3 ตัว</option>
-                <option value="วิ่ง">วิ่ง</option>
-              </select>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium">ประเภทเดิมพัน</p>
+                {draft.betType ? (
+                  <span className="text-xs text-zinc-500">{draft.betType}</span>
+                ) : (
+                  <span className="text-xs text-zinc-600">ยังไม่ได้เลือก</span>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950/30 p-2 backdrop-blur">
+                <div className="grid grid-cols-2 gap-2">
+                  {BET_TYPES.map((bt) => {
+                    const active = draft.betType === bt;
+                    return (
+                      <button
+                        key={bt}
+                        type="button"
+                        onClick={() =>
+                          setDraft((d) => ({
+                            ...d,
+                            betType: bt,
+                          }))
+                        }
+                        className={`rounded-xl px-3 py-3 text-sm font-semibold transition-all duration-200 ease-out active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${
+                          active
+                            ? "border border-white/15 bg-white text-black shadow-[0_10px_30px_rgba(255,255,255,0.08)]"
+                            : "border border-zinc-800 bg-zinc-900/60 text-zinc-100 hover:bg-zinc-800/60"
+                        }`}
+                        aria-pressed={active}
+                      >
+                        {bt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             <div className="grid gap-2">

@@ -2,6 +2,21 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 export type RecordType = "2 ตัว" | "3 ตัว" | "วิ่ง";
 
+export type LotteryName =
+  | "รัฐบาลไทย"
+  | "ลาวพัฒนา"
+  | "ฮานอย"
+  | "ฮานอย VIP"
+  | "ฮานอยพัฒนา";
+
+export type BetType =
+  | "2 ตัว บน"
+  | "2 ตัว ล่าง"
+  | "3 ตัว บน"
+  | "3 ตัว โต๊ด"
+  | "วิ่งบน"
+  | "วิ่งล่าง";
+
 const SUPABASE_URL = "https://ppeprvsejhtffodikclr.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_LCPec3vZVPz9rxlxCGKamQ_U84AZtF-";
 
@@ -10,6 +25,8 @@ export type RecordRow = {
   user_id: string;
   number: string;
   type: RecordType;
+  lottery_name: string | null;
+  bet_type: string | null;
   amount: number;
   note: string | null;
   created_at: string;
@@ -19,6 +36,8 @@ export type SaveRecordInput = {
   userId: string;
   number: string;
   type: RecordType;
+  lotteryName: LotteryName;
+  betType: BetType;
   amount: number;
   note?: string;
 };
@@ -47,6 +66,8 @@ export async function saveRecord(input: SaveRecordInput): Promise<RecordRow> {
 
   const number = input.number.trim();
   if (!number) throw new Error("กรุณากรอกเลข");
+  if (!input.lotteryName?.trim()) throw new Error("กรุณาเลือกชื่อหวย");
+  if (!input.betType?.trim()) throw new Error("กรุณาเลือกประเภทเดิมพัน");
   if (!Number.isFinite(input.amount) || input.amount <= 0)
     throw new Error("กรุณากรอกจำนวนเงินที่ถูกต้อง");
 
@@ -56,6 +77,8 @@ export async function saveRecord(input: SaveRecordInput): Promise<RecordRow> {
       user_id: input.userId,
       number,
       type: input.type,
+      lottery_name: input.lotteryName,
+      bet_type: input.betType,
       amount: input.amount,
       note: input.note?.trim() ? input.note.trim() : null,
     })
@@ -73,7 +96,7 @@ export async function getRecords(userId: string): Promise<RecordRow[]> {
 
   const { data, error } = await supabase
     .from("records")
-    .select("id,user_id,number,type,amount,note,created_at")
+    .select("id,user_id,number,type,lottery_name,bet_type,amount,note,created_at")
     .eq("user_id", uid)
     .order("created_at", { ascending: false })
     .limit(50);

@@ -65,6 +65,7 @@ export default function HistoryPage() {
 
   useEffect(() => {
     abortRef.current.aborted = false;
+    const abortState = abortRef.current;
     async function load() {
       setIsLoading(true);
       setError(null);
@@ -77,24 +78,24 @@ export default function HistoryPage() {
           return;
         }
         const p = await liff.getProfile();
-        if (abortRef.current.aborted) return;
+        if (abortState.aborted) return;
         setUserId(p.userId);
 
         const data = await getRecords(p.userId);
-        if (abortRef.current.aborted) return;
+        if (abortState.aborted) return;
         setRecords(data);
       } catch (err) {
         const msg =
           err instanceof Error ? err.message : "โหลดข้อมูลไม่สำเร็จ กรุณาลองใหม่";
         setError(msg);
       } finally {
-        if (!abortRef.current.aborted) setIsLoading(false);
+        if (!abortState.aborted) setIsLoading(false);
       }
     }
 
     load();
     return () => {
-      abortRef.current.aborted = true;
+      abortState.aborted = true;
     };
   }, []);
 
@@ -136,6 +137,13 @@ export default function HistoryPage() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
+                    <div className="mb-2">
+                      <p className="text-sm font-semibold text-zinc-100">
+                        {item.lottery_name ?? "-"}
+                      </p>
+                      <p className="text-xs text-zinc-500">{item.bet_type ?? "-"}</p>
+                    </div>
+
                     <div className="flex items-center gap-2">
                       <p className="text-lg font-semibold tracking-tight">
                         เลข {item.number}
