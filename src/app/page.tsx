@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import liff from "@line/liff";
 import { useLiffAuth } from "@/src/components/LiffAuthProvider";
-import { ensureLiffReady } from "@/src/lib/liffAuth";
+import { ensureLiffReady, loginKeepingPath } from "@/src/lib/liffAuth";
 
 type Profile = {
   userId: string;
@@ -27,7 +27,7 @@ export default function Home() {
       await ensureLiffReady();
 
       if (!liff.isLoggedIn()) {
-        liff.login();
+        loginKeepingPath();
         return;
       }
 
@@ -106,6 +106,27 @@ export default function Home() {
               ข้อมูลสมาชิกและสถานะการอนุมัติ
             </p>
           </Link>
+        </div>
+
+        <div className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
+          <p className="text-xs uppercase tracking-wide text-zinc-500">Staff OS</p>
+          <p className="text-sm text-zinc-300 mt-1">
+            ลิงก์สำหรับพนักงาน (ส่งแยกให้ Staff)
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link
+              href="/staff"
+              className="rounded-xl border border-emerald-500/25 bg-emerald-950/40 px-4 py-2 text-sm font-semibold text-emerald-100"
+            >
+              เข้า Staff OS
+            </Link>
+            <Link
+              href="/staff/dashboard"
+              className="rounded-xl border border-amber-500/25 bg-amber-950/25 px-4 py-2 text-sm font-semibold text-amber-100"
+            >
+              Staff Dashboard
+            </Link>
+          </div>
         </div>
       </section>
     </main>

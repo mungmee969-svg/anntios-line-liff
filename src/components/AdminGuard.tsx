@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import liff from "@line/liff";
-import { ensureLiffReady } from "@/src/lib/liffAuth";
+import { ensureLiffReady, loginKeepingPath } from "@/src/lib/liffAuth";
 import { useLiffAuth } from "@/src/components/LiffAuthProvider";
 
 export function useAdminGuard() {
@@ -32,7 +32,7 @@ export function useAdminGuard() {
       try {
         await ensureLiffReady();
         if (!liff.isLoggedIn()) {
-          liff.login();
+          loginKeepingPath();
           return;
         }
         const p = await liff.getProfile();

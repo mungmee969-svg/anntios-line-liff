@@ -7,6 +7,7 @@ import {
   forceLiffRelogin,
   getFreshIdToken,
   isLikelyExpiredIdTokenError,
+  loginKeepingPath,
   liffAuthedFetch,
 } from "@/src/lib/liffAuth";
 
@@ -45,7 +46,7 @@ export function LiffAuthProvider({ children }: { children: React.ReactNode }) {
         await ensureLiffReady();
 
         if (!liff.isLoggedIn()) {
-          liff.login();
+          loginKeepingPath();
           return;
         }
 

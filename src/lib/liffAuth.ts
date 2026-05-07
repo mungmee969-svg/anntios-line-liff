@@ -43,7 +43,7 @@ export async function forceLiffRelogin(): Promise<void> {
   } catch {
     /* ignore */
   }
-  liff.login();
+  loginKeepingPath();
 }
 
 export async function ensureLiffReady(): Promise<void> {
@@ -52,6 +52,19 @@ export async function ensureLiffReady(): Promise<void> {
     initPromise = liff.init({ liffId });
   }
   await initPromise;
+}
+
+/**
+ * Login and keep current path (staff/admin safe).
+ * LIFF defaults can drop pathname → ends up at `/`.
+ */
+export function loginKeepingPath(): void {
+  if (typeof window === "undefined") {
+    // No-op on server
+    return;
+  }
+  const redirectUri = window.location.href;
+  liff.login({ redirectUri });
 }
 
 /**
@@ -88,7 +101,7 @@ export async function liffAuthedFetch(
   await ensureLiffReady();
 
   if (!liff.isLoggedIn()) {
-    liff.login();
+    loginKeepingPath();
     return new Response(JSON.stringify({ error: "LOGIN_REQUIRED" }), {
       status: 401,
       headers: { "content-type": "application/json" },
