@@ -1,48 +1,45 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
 
-type Body = { username?: string; password?: string };
-
-function requireEnv(name: string): string {
-  const v = process.env[name];
-  if (!v || !v.trim()) throw new Error(`Missing env ${name}`);
-  return v.trim();
-}
-
-export async function POST(req: NextRequest) {
-  let body: Body = {};
+export async function POST(req: Request) {
   try {
-    body = (await req.json()) as Body;
-  } catch {
-    body = {};
-  }
+    const body = await req.json();
 
-  const username = (body.username ?? "").trim();
-  const password = (body.password ?? "").trim();
-  if (!username || !password) {
-    return NextResponse.json({ success: false, error: "กรอก username/password" }, { status: 400 });
-  }
+    const username = body.username;
+    const password = body.password;
 
-  try {
-    const ownerU = requireEnv("BACKOFFICE_OWNER_USERNAME");
-    const ownerP = requireEnv("BACKOFFICE_OWNER_PASSWORD");
-    const secret = requireEnv("BACKOFFICE_JWT_SECRET");
-    if (secret.length < 32) throw new Error("BACKOFFICE_JWT_SECRET must be >= 32 chars");
+    const envUser = process.env.BACKOFFICE_OWNER_USERNAME;
+    const envPass = process.env.BACKOFFICE_OWNER_PASSWORD;
+    const jwtSecret = process.env.BACKOFFICE_JWT_SECRET;
 
-    if (username !== ownerU || password !== ownerP) {
-      return NextResponse.json({ success: false }, { status: 401 });
+    if (!envUser || !envPass || !jwtSecret) {
+      return NextResponse.json(
+        { error: "Missing env" },
+        { status: 500 }
+      );
+    }
+
+    if (username !== envUser || password !== envPass) {
+      return NextResponse.json(
+        { error: "Invalid credentials" },
+        { status: 401 }
+      );
     }
 
     const token = jwt.sign(
-      { sub: "owner", username, role: "owner" },
-      secret,
-      { algorithm: "HS256", expiresIn: "7d" },
+      { username },
+      jwtSecret,
+      { expiresIn: "7d" }
     );
 
-    return NextResponse.json({ success: true, token });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Server error";
-    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    return NextResponse.json({
+      success: true,
+      token,
+    });
+  } catch (err) {
+    return NextResponse.json(
+      { error: "Server error" },
+      { status: 500 }
+    );
   }
 }
-
