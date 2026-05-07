@@ -42,9 +42,33 @@ export function BackofficeGuard({
       setIsLoading(true);
       setError(null);
       try {
+        // Prefer cookie session; fallback to localStorage token (Phase 1 token login)
+        const token =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem("backoffice_token")
+            : null;
+
         const res = await fetch("/api/backoffice/auth/me", { cache: "no-store" });
         const j = (await res.json().catch(() => ({}))) as MeResp;
         if (!res.ok) {
+          if (token) {
+            // Minimal token-only mode: treat as "owner" session client-side
+            if (!cancelled) {
+              setMe({
+                user: {
+                  id: "owner",
+                  username: "owner",
+                  displayName: "Owner",
+                  role: "owner",
+                  isActive: true,
+                  permissions: {},
+                },
+              });
+              setIsLoading(false);
+              if (isLoginPage) router.replace("/backoffice/dashboard");
+            }
+            return;
+          }
           if (!cancelled) {
             setMe(j);
             setIsLoading(false);

@@ -19,13 +19,15 @@ export default function BackofficeLoginPage() {
     setBusy(true);
     setToast({ open: false });
     try {
-      const res = await fetch("/api/backoffice/auth/login", {
+      const res = await fetch("/api/backoffice/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ username, password, remember }),
       });
-      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      const j = (await res.json().catch(() => ({}))) as { token?: string; error?: string };
       if (!res.ok) throw new Error(j.error || "Login ไม่สำเร็จ");
+      if (!j.token) throw new Error("Token ไม่ถูกต้อง");
+      localStorage.setItem("backoffice_token", j.token);
       setToast({ open: true, tone: "success", message: "เข้าสู่ระบบสำเร็จ" });
       router.replace("/backoffice/dashboard");
     } catch (e) {
