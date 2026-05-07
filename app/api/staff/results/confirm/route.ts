@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/app/api/_lib/supabaseAdmin";
-import { requireAdmin } from "@/app/api/_lib/adminGuard";
+import { requireStaff } from "@/app/api/_lib/staffGuard";
+import { insertAuditLog } from "@/app/api/_lib/auditLog";
 import { settleLotteryBills, type LotteryDrawInput } from "@/app/api/_lib/lotterySettle";
 
 export async function POST(req: NextRequest) {
   try {
-    const admin = await requireAdmin(req);
+    const staff = await requireStaff(req, "can_settle_result");
     const body = (await req.json()) as LotteryDrawInput;
 
     if (!body?.lotteryName?.trim()) {
@@ -19,7 +20,16 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin();
-    const { processed } = await settleLotteryBills(supabase, body, admin.userId);
+    const { processed } = await settleLotteryBills(supabase, body, staff.userId);
+
+    await insertAuditLog(supabase, {
+      actorUserId: staff.userId,
+      actorName: staff.displayName,
+      action: "settle_result",
+      targetType: "lottery",
+      targetId: body.lotteryName.trim(),
+      metadata: { processed },
+    });
 
     return NextResponse.json({ ok: true, processed, lotteryName: body.lotteryName.trim() });
   } catch (e) {
