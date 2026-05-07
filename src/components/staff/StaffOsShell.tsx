@@ -67,8 +67,10 @@ export function StaffOsShell({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen bg-[#050508] flex items-center justify-center px-4">
         <div className="max-w-md w-full rounded-2xl border border-rose-500/25 bg-rose-950/20 backdrop-blur-xl p-6 text-center">
-          <p className="text-rose-100 font-semibold">ไม่มีสิทธิ์เข้า Staff OS</p>
-          <p className="text-xs text-zinc-400 mt-2 break-all">{error ?? "เพิ่ม line_user_id ในตาราง staff_users หรือใช้บัญชี Owner (ADMIN_USER_IDS)"}</p>
+          <p className="text-rose-100 font-semibold">ไม่มีสิทธิ์เข้าหลังบ้าน</p>
+          <p className="text-xs text-zinc-400 mt-2 break-all">
+            {error ?? "เพิ่ม line_user_id ในตาราง staff_users หรือใช้บัญชี Owner (NEXT_PUBLIC_ADMIN_USER_IDS)"}
+          </p>
           <Link
             href="/"
             className="inline-block mt-5 rounded-xl bg-emerald-500/90 px-5 py-2.5 text-sm font-semibold text-black"
