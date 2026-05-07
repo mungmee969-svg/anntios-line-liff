@@ -44,6 +44,11 @@ export function BackofficeShell({ children }: { children: React.ReactNode }) {
   const [now, setNow] = useState(() => new Date());
   const [me, setMe] = useState<{ username: string; displayName: string | null } | null>(null);
 
+  if (pathname === "/backoffice/login") {
+    // Login page should not show OS chrome
+    return <>{children}</>;
+  }
+
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
