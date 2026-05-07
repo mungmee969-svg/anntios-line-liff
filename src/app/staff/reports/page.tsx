@@ -16,9 +16,11 @@ export default function StaffReportsPage() {
   const [to, setTo] = useState(dayISO(today));
   const [metrics, setMetrics] = useState<Record<string, number> | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setErr(null);
+    setMsg(null);
     try {
       const sp = new URLSearchParams({ from: `${from}T00:00:00.000Z`, to: `${to}T23:59:59.999Z` });
       const res = await authFetch(`/api/staff/reports?${sp.toString()}`);
@@ -26,6 +28,7 @@ export default function StaffReportsPage() {
       if (!res.ok) throw new Error(j.error || "โหลดไม่สำเร็จ");
       setMetrics(j.metrics ?? null);
     } catch (e) {
+      setMetrics(null);
       setErr(e instanceof Error ? e.message : "โหลดไม่สำเร็จ");
     }
   }, [authFetch, from, to]);
@@ -36,6 +39,8 @@ export default function StaffReportsPage() {
   }, [load]);
 
   async function exportCsv() {
+    setMsg(null);
+    setErr(null);
     const sp = new URLSearchParams({
       from: `${from}T00:00:00.000Z`,
       to: `${to}T23:59:59.999Z`,
@@ -43,7 +48,7 @@ export default function StaffReportsPage() {
     });
     const res = await authFetch(`/api/staff/reports?${sp.toString()}`);
     if (!res.ok) {
-      alert("ส่งออกไม่สำเร็จ");
+      setErr("ส่งออกไม่สำเร็จ");
       return;
     }
     const blob = await res.blob();
@@ -53,6 +58,7 @@ export default function StaffReportsPage() {
     a.download = `anntios-report-${from}-${to}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    setMsg("ดาวน์โหลด CSV แล้ว");
   }
 
   return (
@@ -81,21 +87,26 @@ export default function StaffReportsPage() {
         </label>
         <button
           type="button"
-          onClick={load}
+          onClick={() => void load()}
           className="rounded-xl bg-emerald-500/90 px-4 py-2 text-sm font-semibold text-black"
         >
           โหลด
         </button>
         <button
           type="button"
-          onClick={exportCsv}
+          onClick={() => void exportCsv()}
           className="rounded-xl border border-amber-500/40 px-4 py-2 text-sm text-amber-100"
         >
           Export CSV
         </button>
       </div>
 
-      {err ? <p className="text-sm text-rose-300">{err}</p> : null}
+      {err ? (
+        <div className="rounded-2xl border border-amber-500/25 bg-amber-950/15 px-4 py-3 text-sm text-amber-100/90">
+          ยังโหลดรายงานไม่ได้ตอนนี้ — แสดงโหมดว่าง (รายละเอียด: {err})
+        </div>
+      ) : null}
+      {msg ? <p className="text-sm text-center text-emerald-300/90">{msg}</p> : null}
 
       {metrics ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -106,7 +117,13 @@ export default function StaffReportsPage() {
             </div>
           ))}
         </div>
-      ) : null}
+      ) : (
+        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-8 text-center">
+          <p className="text-sm font-semibold text-zinc-200">ยังไม่มีข้อมูลรายงาน</p>
+          <p className="text-xs text-zinc-500 mt-2">เลือกช่วงวันที่ แล้วกด “โหลด”</p>
+        </div>
+      )}
     </div>
   );
 }
+

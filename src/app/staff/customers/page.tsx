@@ -22,15 +22,19 @@ function fmt(n: number) {
 export default function StaffCustomersPage() {
   const { authFetch } = useLiffAuth();
   const [rows, setRows] = useState<Row[]>([]);
+  const [err, setErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const res = await authFetch("/api/staff/customers");
-    const j = (await res.json()) as { customers?: Row[]; error?: string };
-    if (!res.ok) {
-      alert(j.error || "โหลดไม่สำเร็จ");
-      return;
+    setErr(null);
+    try {
+      const res = await authFetch("/api/staff/customers");
+      const j = (await res.json()) as { customers?: Row[]; error?: string };
+      if (!res.ok) throw new Error(j.error || "โหลดไม่สำเร็จ");
+      setRows(j.customers ?? []);
+    } catch (e) {
+      setRows([]);
+      setErr(e instanceof Error ? e.message : "โหลดไม่สำเร็จ");
     }
-    setRows(j.customers ?? []);
   }, [authFetch]);
 
   useEffect(() => {
@@ -40,7 +44,21 @@ export default function StaffCustomersPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold text-zinc-50">ลูกค้า</h1>
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-50">ลูกค้า</h1>
+          <p className="text-sm text-zinc-500">สรุปยอดเครดิต + การใช้งาน</p>
+        </div>
+        <button type="button" onClick={load} className="rounded-xl border border-white/10 px-4 py-2 text-sm">
+          รีเฟรช
+        </button>
+      </div>
+
+      {err ? (
+        <div className="rounded-2xl border border-amber-500/25 bg-amber-950/15 px-4 py-3 text-sm text-amber-100/90">
+          ยังโหลดรายชื่อลูกค้าไม่ได้ตอนนี้ — แสดงโหมดว่าง (รายละเอียด: {err})
+        </div>
+      ) : null}
 
       <div className="hidden md:block rounded-2xl border border-white/[0.08] overflow-hidden">
         <table className="w-full text-sm">
@@ -61,7 +79,7 @@ export default function StaffCustomersPage() {
             {rows.map((r) => (
               <tr key={r.user_id} className="border-t border-white/[0.06]">
                 <td className="px-3 py-2">{r.display_name ?? "—"}</td>
-                <td className="px-3 py-2 font-mono text-xs break-all max-w-[120px]">{r.user_id}</td>
+                <td className="px-3 py-2 font-mono text-xs break-all max-w-[160px]">{r.user_id}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{fmt(r.credit_balance)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-zinc-500">{fmt(r.locked_balance)}</td>
                 <td className="px-3 py-2 text-right">{r.total_bills}</td>
@@ -100,6 +118,14 @@ export default function StaffCustomersPage() {
           </Link>
         ))}
       </div>
+
+      {rows.length === 0 ? (
+        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-8 text-center">
+          <p className="text-sm font-semibold text-zinc-200">ยังไม่มีลูกค้า</p>
+          <p className="text-xs text-zinc-500 mt-2">เมื่อมีผู้ใช้งานครั้งแรก ระบบจะสร้าง wallet และแสดงที่นี่</p>
+        </div>
+      ) : null}
     </div>
   );
 }
+

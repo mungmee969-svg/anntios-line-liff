@@ -55,13 +55,11 @@ export default function StaffResultsPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(buildBody()),
       });
-      const j = (await res.json()) as {
-        preview?: typeof preview;
-        error?: string;
-      };
+      const j = (await res.json().catch(() => ({}))) as { preview?: typeof preview; error?: string };
       if (!res.ok) throw new Error(j.error || "Preview ล้มเหลว");
       setPreview(j.preview ?? null);
     } catch (e) {
+      setPreview(null);
       setMsg(e instanceof Error ? e.message : "ผิดพลาด");
     } finally {
       setBusy(false);
@@ -73,7 +71,7 @@ export default function StaffResultsPage() {
       setMsg("กด Preview ก่อน");
       return;
     }
-    if (!confirm("ยืนยันสรุปผลและตัดเครดิต/โอนรางวัลทุกบิลที่รอของหวยนี้?")) return;
+    if (!confirm("ยืนยันสรุปผลและโอนรางวัลทุกบิลที่รอของหวยนี้?")) return;
     setBusy(true);
     setMsg(null);
     try {
@@ -82,7 +80,7 @@ export default function StaffResultsPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(buildBody()),
       });
-      const j = (await res.json()) as { error?: string; processed?: number };
+      const j = (await res.json().catch(() => ({}))) as { error?: string; processed?: number };
       if (!res.ok) throw new Error(j.error || "Confirm ล้มเหลว");
       setMsg(`สำเร็จ — สรุป ${j.processed ?? 0} บิล`);
       setPreview(null);
@@ -96,7 +94,7 @@ export default function StaffResultsPage() {
   return (
     <div className="space-y-6 max-w-xl">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-50">ตรวจผลหวย</h1>
+        <h1 className="text-2xl font-bold text-zinc-50">ตรวจผล</h1>
         <p className="text-sm text-zinc-500">Preview ก่อน — แล้วค่อย Confirm Settle</p>
       </div>
 
@@ -115,6 +113,7 @@ export default function StaffResultsPage() {
             ))}
           </select>
         </label>
+
         <label className="block text-sm">
           <span className="text-zinc-500">งวด / หมายเหตุ (optional)</span>
           <input
@@ -124,6 +123,7 @@ export default function StaffResultsPage() {
             placeholder="เช่น 7 พ.ค. 2569"
           />
         </label>
+
         <label className="block text-sm">
           <span className="text-zinc-500">3 ตัวบน (ตรง)</span>
           <input
@@ -177,11 +177,11 @@ export default function StaffResultsPage() {
           </label>
         </div>
 
-        <div className="flex flex-wrap gap-2 pt-2">
+        <div className="flex gap-2 pt-2">
           <button
             type="button"
             disabled={busy}
-            onClick={doPreview}
+            onClick={() => void doPreview()}
             className="rounded-xl border border-emerald-500/40 bg-emerald-950/40 px-5 py-2.5 text-sm font-semibold text-emerald-100"
           >
             Preview ผล
@@ -189,7 +189,7 @@ export default function StaffResultsPage() {
           <button
             type="button"
             disabled={busy || !preview}
-            onClick={doConfirm}
+            onClick={() => void doConfirm()}
             className="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-bold text-black disabled:opacity-40"
           >
             Confirm Settle
@@ -220,3 +220,4 @@ export default function StaffResultsPage() {
     </div>
   );
 }
+
