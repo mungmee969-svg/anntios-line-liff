@@ -89,7 +89,7 @@ export default function StaffDashboardPage() {
     return new Intl.DateTimeFormat("th-TH", { dateStyle: "short", timeStyle: "short" }).format(
       new Date(data.updatedAt),
     );
-  }, [data?.updatedAt]);
+  }, [data]);
 
   return (
     <div className="space-y-6">
